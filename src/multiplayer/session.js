@@ -60,15 +60,24 @@ export function createReconnectController({ onReconnect, onStatus }) {
     }, delay);
   }
 
-  window.addEventListener('online', () => {
+  const handleOnline = () => {
     onStatus?.('Conexión a internet recuperada · reconectando sala…');
     schedule('browser_online');
-  });
-  window.addEventListener('offline', () => {
+  };
+  const handleOffline = () => {
     onStatus?.('Sin internet · la partida queda pausada hasta recuperar conexión.');
-  });
+  };
 
-  return { reset, stop, schedule, get attempts() { return attempts; } };
+  window.addEventListener('online', handleOnline);
+  window.addEventListener('offline', handleOffline);
+
+  function destroy() {
+    stop();
+    window.removeEventListener('online', handleOnline);
+    window.removeEventListener('offline', handleOffline);
+  }
+
+  return { reset, stop, destroy, schedule, get attempts() { return attempts; } };
 }
 
 window.ExploradorNetworkSession = {
