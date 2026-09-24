@@ -1,6 +1,24 @@
-# Explorador Extremo V12.3 · combate cooperativo
+# Explorador Extremo V12.4 · estabilidad online
 
 Copia independiente del juego del profesor Juan Neira (crédito conservado en pantalla). La V12 mantiene el modo individual y refuerza el cooperativo de dos jugadores usando Supabase Realtime.
+
+## Novedades V12.4
+
+- Reconexión automática con reintentos progresivos ante cortes de Realtime o internet.
+- La partida cooperativa **se pausa** si falta uno de los dos jugadores y continúa al recuperar Presence.
+- Sesión online guardada localmente durante hasta 12 horas.
+- Botón **Reanudar sala** después de recargar el navegador.
+- Si recarga el anfitrión, se conserva una instantánea local de nivel, laberinto, posiciones, HP, puntaje, botiquines, enemigos, placas y jefe.
+- Si recarga el invitado, vuelve a unirse y recibe el estado autoritativo del anfitrión.
+- Presencia deduplicada por cliente para reducir falsos “tercer jugador” durante reconexiones.
+- Canal protegido contra eventos tardíos de conexiones anteriores.
+- Botón **Salir de sala** que limpia la sesión y detiene los reintentos.
+- Modularización ampliada:
+  - `src/combat-config.js`
+  - `src/multiplayer/session.js`
+  - `src/levels/config.js`
+
+La recuperación V12.4 es local al navegador. Todavía no persiste partidas en una tabla de Supabase; esa persistencia de cuenta/estadísticas queda para V13.
 
 ## Novedades V12.3
 
@@ -46,7 +64,7 @@ Copia independiente del juego del profesor Juan Neira (crédito conservado en pa
 
 El anfitrión es autoritativo: ejecuta la física, enemigos, trampas, puntaje y progresión. El invitado envía su pose y acciones, mientras recibe instantáneas del mundo.
 
-Las salas son efímeras y usan **Realtime Broadcast + Presence**. No requieren tablas SQL para funcionar. El código de sala no constituye autenticación.
+Las salas usan **Realtime Broadcast + Presence** y siguen siendo efímeras en Supabase. V12.4 agrega recuperación local de sesión/partida mediante `localStorage`, sin tablas SQL. El código de sala no constituye autenticación.
 
 El proyecto configurado en `supabase.public.json` usa exclusivamente URL y clave **publicable**. Nunca debe utilizarse una secret key o `service_role` en el navegador.
 
@@ -71,4 +89,4 @@ La versión del curso tenía un cierre de testing el 3 de octubre de 2026. Esta 
 
 ## Validación
 
-La sintaxis del script principal se comprueba antes de publicar. La validación funcional final debe hacerse con dos clientes reales conectados al mismo despliegue HTTPS, verificando lobby, Presence, movimiento, disparos, cambio de nivel y desconexión.
+La sintaxis del script principal se comprueba antes de publicar y Vercel debe completar el build. La validación funcional final debe hacerse con dos clientes reales conectados al mismo despliegue HTTPS, incluyendo: desconectar/red-conectar, recargar invitado, recargar anfitrión, reanudar sala, movimiento, combate y progresión.
