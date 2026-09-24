@@ -228,6 +228,7 @@ function createProfileClient() {
       .order('best_score', { ascending: false })
       .order('wins', { ascending: false })
       .order('best_time_seconds', { ascending: true, nullsFirst: false })
+      .gt('games_played', 0)
       .limit(safeLimit);
     if (error) throw error;
     return data || [];
@@ -235,13 +236,10 @@ function createProfileClient() {
 
   async function getRank() {
     const own = await getProfile();
-    if (!own) return null;
-    const { count, error } = await supabase
-      .from('player_profiles')
-      .select('*', { count: 'exact', head: true })
-      .gt('best_score', own.best_score);
+    if (!own?.games_played) return null;
+    const { data, error } = await supabase.rpc('get_player_rank', { p_player_id: identity.id });
     if (error) throw error;
-    return (count || 0) + 1;
+    return data == null ? null : Number(data);
   }
 
   async function getAchievements() {

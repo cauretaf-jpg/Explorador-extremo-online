@@ -21,6 +21,8 @@ await build({ entryPoints: [path.join(root, 'src/levels/config.js')], bundle: tr
   format: 'iife', platform: 'browser', outfile: path.join(dist, 'levels-config.js') });
 await build({ entryPoints: [path.join(root, 'src/progression/config.js')], bundle: true, minify: true,
   format: 'iife', platform: 'browser', outfile: path.join(dist, 'progression-config.js') });
+await build({ entryPoints: [path.join(root, 'src/game/dispose.js')], bundle: true, minify: true,
+  format: 'iife', platform: 'browser', outfile: path.join(dist, 'dispose-3d.js') });
 await build({ entryPoints: [path.join(root, 'src/audio/engine.js')], bundle: true, minify: true,
   format: 'iife', platform: 'browser', outfile: path.join(dist, 'audio-engine.js') });
 await build({ entryPoints: [path.join(root, 'src/ui/mobile-controls.js')], bundle: true, minify: true,

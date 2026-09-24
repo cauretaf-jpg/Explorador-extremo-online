@@ -11,6 +11,7 @@
     <script src="./network-session.js"></script>
     <script src="./levels-config.js"></script>
     <script src="./progression-config.js"></script>
+    <script src="./dispose-3d.js"></script>
     <script src="./audio-engine.js"></script>
     <script src="./mobile-controls.js"></script>
     <script src="./ui-hud.js"></script>
@@ -628,7 +629,7 @@
     <div id="menu-screen" class="overlay">
         <h1>Explorador Extremo 3D</h1>
         <div class="author-tag">Autor del Juego: Profesor Juan Neira</div>
-        <div class="subtitle">V13.2 · Modo Batalla multijugador</div>
+        <div class="subtitle">V13.2.1 · Estabilización multijugador</div>
         <button class="btn" id="btn-start">Jugar solo</button>
 
         <div id="online-entry">
@@ -1028,6 +1029,8 @@
         const AudioEngine = window.ExploradorAudioEngine;
 
         const NetworkSession = window.ExploradorNetworkSession;
+        const Dispose3D = window.ExploradorDispose;
+        const COOP_PROTOCOL_VERSION = 5;
         const ProfileClient = window.ExploradorProfile?.createProfileClient?.() || null;
         let ProfilePanel = null;
 
@@ -1170,6 +1173,7 @@
                     name: this.name,
                     ready: this.ready,
                     clientId: this.presenceKey,
+                    protocolVersion: COOP_PROTOCOL_VERSION,
                     joinedAt: Date.now()
                 };
             },
@@ -1332,6 +1336,10 @@
                         return;
                     }
                     this.guestProbeCount = 0;
+                    if (this.hostInfo?.protocolVersion !== COOP_PROTOCOL_VERSION) {
+                        this.status('La sala usa una versión incompatible. Actualicen el juego en ambos dispositivos.');
+                        return;
+                    }
                     const otherGuests = guests.filter(p => p.clientId !== this.presenceKey);
                     if (otherGuests.length) {
                         this.status('La sala ya tiene dos jugadores.');
@@ -1354,6 +1362,11 @@
                 this.guestInfo = guests[0] || null;
                 this.updateLobby(participants);
 
+                if (this.role === 'host' && guests.some(p => p.protocolVersion !== COOP_PROTOCOL_VERSION)) {
+                    this.status('El segundo explorador usa una versión incompatible. Debe actualizar el juego.');
+                    this.peerConnected = false;
+                    return;
+                }
                 if (this.role === 'host' && hosts.length > 1) {
                     this.status('El código ya está en uso por otro anfitrión. Crea otra sala.');
                     return;
@@ -1390,6 +1403,10 @@
                 else if (msg.type === 'start' && this.role === 'guest' && !Game.isReady)
                     document.getElementById('btn-start').click();
                 else if (msg.type === 'state' && this.role === 'guest' && msg.state) {
+                    if (msg.state.protocolVersion !== COOP_PROTOCOL_VERSION) {
+                        this.status('Versión de protocolo incompatible con el anfitrión. Actualiza el juego.');
+                        return;
+                    }
                     this.state = msg.state; this.applyState(msg.state);
                 } else if (msg.type === 'pose' && this.role === 'host' && [msg.x,msg.z,msg.angle].every(Number.isFinite))
                     this.applyPose(msg);
@@ -1439,6 +1456,7 @@
                     ...Game.coopPlates.map(p => ({ kind: 'plate', id: p.id, x: p.x, z: p.z }))
                 ];
                 const state = {
+                    protocolVersion: COOP_PROTOCOL_VERSION,
                     level: Game.level, maze: Game.maze, layout,
                     enemies: Game.enemies.map(e => ({
                         x: e.x, z: e.z, px: e.mesh.position.x, pz: e.mesh.position.z,
@@ -1553,14 +1571,14 @@
                 for (let i = Game.prizes.length - 1; i >= 0; i--) {
                     const p = Game.prizes[i];
                     if (!state.prizes.some(q => q.x === p.x && q.z === p.z)) {
-                        mazeGroup.remove(p.mesh); Game.prizes.splice(i, 1);
+                        Dispose3D?.disposeObject3D?.(p.mesh); mazeGroup.remove(p.mesh); Game.prizes.splice(i, 1);
                     }
                 }
                 for (let i = Game.enemies.length - 1; i >= 0; i--) {
                     const e = Game.enemies[i];
                     const authoritative = state.enemies.find(q => q.x === e.x && q.z === e.z);
                     if (!authoritative) {
-                        mazeGroup.remove(e.mesh);
+                        Dispose3D?.disposeObject3D?.(e.mesh); mazeGroup.remove(e.mesh);
                         if (e.isBoss) Game.boss = null;
                         Game.enemies.splice(i, 1);
                     } else {
@@ -1573,7 +1591,7 @@
                 for (let i = Game.medkits.length - 1; i >= 0; i--) {
                     const m = Game.medkits[i];
                     if (!(state.medkits || []).some(q => q.x === m.x && q.z === m.z)) {
-                        mazeGroup.remove(m.mesh); Game.medkits.splice(i, 1);
+                        Dispose3D?.disposeObject3D?.(m.mesh); mazeGroup.remove(m.mesh); Game.medkits.splice(i, 1);
                     }
                 }
                 if (!this.shotGroup) {
@@ -1623,12 +1641,14 @@
                     }
                 }
             });
-            ProfileClient.ensureProfile(rememberedName || '').then(profile => {
-                if (!rememberedName && profile?.display_name) {
-                    document.getElementById('player-name').value = profile.display_name;
-                    localStorage.setItem('explorador-player-name', profile.display_name);
-                }
-            }).catch(error => console.warn('Perfil persistente no disponible:', error));
+            if (ProfileClient.identity) {
+                ProfileClient.getProfile().then(profile => {
+                    if (!rememberedName && profile?.display_name) {
+                        document.getElementById('player-name').value = profile.display_name;
+                        localStorage.setItem('explorador-player-name', profile.display_name);
+                    }
+                }).catch(error => console.warn('Perfil persistente no disponible:', error));
+            }
         }
 
         const invitedRoom = new URLSearchParams(location.search).get('sala');
@@ -1973,7 +1993,9 @@
             }
 
             while(mazeGroup.children.length > 0){
-                mazeGroup.remove(mazeGroup.children[0]);
+                const child = mazeGroup.children[0];
+                Dispose3D?.disposeObject3D?.(child);
+                mazeGroup.remove(child);
             }
             Game.prizes = [];
             Game.enemies = [];
@@ -2106,6 +2128,7 @@
                 Game.enemies.some(e => e.x === wx && e.z === wz) ||
                 Game.prizes.some(p => p.x === wx && p.z === wz) ||
                 Game.medkits.some(m => m.x === wx && m.z === wz) ||
+                Game.traps.some(t => t.x === wx && t.z === wz) ||
                 Game.coopPlates.some(p => p.x === wx && p.z === wz);
             const goal = Game.gridSize - 2;
             let best = null;
@@ -3275,8 +3298,38 @@
             if (Net.remote) Net.remote.rotation.z = Game.coopDowned[remoteRole] ? Math.PI / 2 : 0;
         }
 
+        function consumeTeamWipe() {
+            Game.coopDowned = { host:false, guest:false, hostTimer:0, guestTimer:0 };
+            Game.reviveProgress = 0;
+            Game.reviveTarget = null;
+            Game.lives--;
+            Game.score = Math.max(0, Game.score - 2500);
+            Game.health.host = Game.maxHealth;
+            Game.health.guest = Game.maxHealth;
+            if (playerMesh) {
+                playerMesh.rotation.z = 0;
+                playerMesh.position.set(Game.cellSize, 0, Game.cellSize);
+            }
+            if (Net.remote) {
+                Net.remote.rotation.z = 0;
+                Net.remote.position.set(Game.cellSize + 0.75, 0, Game.cellSize);
+            }
+            updateHUD();
+            Net.status('El equipo cayó · se consumió una sola vida compartida.');
+            if (Game.lives <= 0) endGame();
+        }
+
         function updateReviveSystem(delta) {
             if (Net.role !== 'host' || Game.gameOver) return;
+
+            if (Game.coopDowned.host && Game.coopDowned.guest) {
+                Game.coopDowned.hostTimer = Math.max(0, (Game.coopDowned.hostTimer || 12) - delta);
+                Game.coopDowned.guestTimer = Math.max(0, (Game.coopDowned.guestTimer || 12) - delta);
+                if (Game.coopDowned.hostTimer <= 0 || Game.coopDowned.guestTimer <= 0) consumeTeamWipe();
+                syncDownedVisuals();
+                updateReviveUI();
+                return;
+            }
 
             for (const role of ['host', 'guest']) {
                 if (!Game.coopDowned[role]) continue;
@@ -3961,6 +4014,7 @@
                         }
 
                         if (enemy.hp <= 0) {
+                            Dispose3D?.disposeObject3D?.(enemy.mesh);
                             scene.remove(enemy.mesh);
                             mazeGroup.remove(enemy.mesh);
                             Game.enemies.splice(j, 1);
@@ -3988,7 +4042,7 @@
                 }
 
                 if(hitWall || hitEnemy || arrow.mesh.position.distanceTo(arrow.origin) > 60) {
-                    scene.remove(arrow.mesh);
+                    Dispose3D?.disposeObject3D?.(arrow.mesh); scene.remove(arrow.mesh);
                     Game.arrows.splice(i, 1);
                 }
             }
@@ -4065,7 +4119,7 @@
                 let hitPlayer = Math.min(distToPlayer, distToGuest) < 0.9;
 
                 if (hitPlayer && !Game.gameOver) {
-                    scene.remove(proj.mesh);
+                    Dispose3D?.disposeObject3D?.(proj.mesh); scene.remove(proj.mesh);
                     Game.enemyProjectiles.splice(i, 1);
                     Net.hitTarget = distToGuest < distToPlayer ? Net.remote : playerMesh;
                     handlePlayerDeath(proj.damage || 24);
@@ -4074,7 +4128,7 @@
                 }
 
                 if (hitWall || proj.mesh.position.distanceTo(playerMesh.position) > 60) {
-                    scene.remove(proj.mesh);
+                    Dispose3D?.disposeObject3D?.(proj.mesh); scene.remove(proj.mesh);
                     Game.enemyProjectiles.splice(i, 1);
                 }
             }
@@ -4100,11 +4154,18 @@
                     trap.pivot.rotation.z = Math.sin(trap.phase * 1.1) * 1.1;
                     let bladeWorldPos = new THREE.Vector3();
                     trap.blade.getWorldPosition(bladeWorldPos);
-                    let bladeDist = Math.min(
-                    Game.coopDowned.host ? Infinity : Math.hypot(playerMesh.position.x - bladeWorldPos.x, playerMesh.position.z - bladeWorldPos.z),
-                    Net.remote && !Game.coopDowned.guest ? Math.hypot(Net.remote.position.x - bladeWorldPos.x, Net.remote.position.z - bladeWorldPos.z) : Infinity
-                );
-                    if (bladeDist < 0.8 && trap.cooldown <= 0) { handlePlayerDeath(36); trap.cooldown = 1.2; }
+                    const hostBladeDist = Game.coopDowned.host
+                        ? Infinity
+                        : Math.hypot(playerMesh.position.x - bladeWorldPos.x, playerMesh.position.z - bladeWorldPos.z);
+                    const guestBladeDist = Net.remote && !Game.coopDowned.guest
+                        ? Math.hypot(Net.remote.position.x - bladeWorldPos.x, Net.remote.position.z - bladeWorldPos.z)
+                        : Infinity;
+                    const bladeDist = Math.min(hostBladeDist, guestBladeDist);
+                    if (bladeDist < 0.8 && trap.cooldown <= 0) {
+                        Net.hitTarget = guestBladeDist < hostBladeDist ? Net.remote : playerMesh;
+                        handlePlayerDeath(36);
+                        trap.cooldown = 1.2;
+                    }
                 } else if (trap.type === 'geiser') {
                     let active = Math.sin(trap.phase * 1.6) > 0.2;
                     trap.flame.visible = active;
@@ -4140,7 +4201,7 @@
                 if(dist < 1.1) {
                     AudioEngine.playCoin();
                     addScore(prize.points);
-                    mazeGroup.remove(prize.mesh);
+                    Dispose3D?.disposeObject3D?.(prize.mesh); mazeGroup.remove(prize.mesh);
                     Game.prizes.splice(i, 1);
                 }
             }
@@ -4161,7 +4222,7 @@
 
                 if (dist < 1.15 && (Game.health[collector] ?? Game.maxHealth) < Game.maxHealth) {
                     if (healRole(collector, Combat.combatRules.medkitHeal)) {
-                        mazeGroup.remove(medkit.mesh);
+                        Dispose3D?.disposeObject3D?.(medkit.mesh); mazeGroup.remove(medkit.mesh);
                         Game.medkits.splice(i, 1);
                     }
                 }
@@ -4274,6 +4335,7 @@
                 const enemy = Game.enemies[i];
                 const saved = (snapshot.enemies || []).find(e => e.x === enemy.x && e.z === enemy.z);
                 if (!saved) {
+                    Dispose3D?.disposeObject3D?.(enemy.mesh);
                     mazeGroup.remove(enemy.mesh);
                     if (enemy.isBoss) Game.boss = null;
                     Game.enemies.splice(i, 1);

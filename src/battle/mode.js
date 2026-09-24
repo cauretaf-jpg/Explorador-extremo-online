@@ -1,3 +1,16 @@
+import {
+  BATTLE_PROTOCOL_VERSION,
+  HOST_CONTROL_TYPES,
+  cleanBattleName,
+  createEnvelope,
+  createSigningIdentity,
+  isBattleRoomCode,
+  identityIdFromPublicJwk,
+  isCompatiblePresence,
+  verifyEnvelope
+} from './protocol.mjs';
+import { disposeObject3D } from '../game/dispose.js';
+
 const BattleMode = (() => {
   const MAX_PLAYERS = 8;
   const MIN_PLAYERS = 2;
@@ -7,7 +20,11 @@ const BattleMode = (() => {
   const SHOT_DAMAGE = 25;
   const SHOT_COOLDOWN_MS = 260;
   const MOVE_SPEED = 8;
+  const POSE_INTERVAL = 0.125;
+  const STATE_INTERVAL = 0.25;
+  const HOST_GRACE_MS = 15000;
   const STORAGE_KEY = 'explorador-battle-name';
+  const SESSION_KEY = 'explorador-battle-session-v1321';
   const palette = [0x00ffcc,0xff4d6d,0xffd166,0x5aa9ff,0xb388ff,0x7ee081,0xff8c42,0xf15bb5];
   const spawnPoints = [
     [-19,-19],[19,19],[-19,19],[19,-19],[0,-19],[0,19],[-19,0],[19,0]
@@ -34,6 +51,9 @@ const BattleMode = (() => {
   let gameStatusEl, hpEl, killsEl, timerEl, scoreboardEl, localNameEl;
   let touchJoystickPointer = null, touchFireTimer = null;
   let presenceProbe = null, roomActive = false;
+  let signingIdentity = null, lockedHostId = null, reconnectingActive = false;
+  let guestUplink = null, hostUplinks = new Map(), hostGraceTimer = null;
+  const seenNonces = new Set();
 
   function cfg() {
     return window.EXPLORADOR_CONFIG;
@@ -48,7 +68,56 @@ const BattleMode = (() => {
   }
 
   function cleanName(value) {
-    return String(value || '').replace(/[\u0000-\u001f\u007f]/g,'').replace(/\s+/g,' ').trim().slice(0,18);
+    return cleanBattleName(value);
+  }
+
+  function loadBattleSession(code = null) {
+    try {
+      const saved = JSON.parse(sessionStorage.getItem(SESSION_KEY) || 'null');
+      if (!saved || Date.now() - Number(saved.savedAt || 0) > 2 * 60 * 60 * 1000) return null;
+      if (code && saved.roomCode !== code) return null;
+      return saved;
+    } catch {
+      return null;
+    }
+  }
+
+  function saveBattleSession(extra = {}) {
+    if (!roomCode || !clientId || !signingIdentity) return;
+    try {
+      sessionStorage.setItem(SESSION_KEY, JSON.stringify({
+        roomCode, clientId, name, role, active, ready, lockedHostId,
+        privateJwk: signingIdentity.privateJwk,
+        publicJwk: signingIdentity.publicJwk,
+        savedAt: Date.now(),
+        ...extra
+      }));
+    } catch {}
+  }
+
+  function clearBattleSession() {
+    try { sessionStorage.removeItem(SESSION_KEY); } catch {}
+  }
+
+  async function prepareSigningIdentity(saved = null) {
+    signingIdentity = await createSigningIdentity(saved);
+  }
+
+  function rememberNonce(nonce) {
+    if (!nonce || seenNonces.has(nonce)) return false;
+    seenNonces.add(nonce);
+    if (seenNonces.size > 512) seenNonces.delete(seenNonces.values().next().value);
+    return true;
+  }
+
+  async function decodeEnvelope(envelope, expectedSenderId = null) {
+    if (!envelope?.senderId || !envelope?.type) return null;
+    const participant = participants.get(envelope.senderId) || presence.find(p => p.id === envelope.senderId);
+    if (!isCompatiblePresence(participant)) return null;
+    if (HOST_CONTROL_TYPES.has(envelope.type) && envelope.senderId !== lockedHostId) return null;
+    const valid = await verifyEnvelope(envelope, participant.publicKey, { expectedSenderId });
+    if (!valid || !rememberNonce(envelope.nonce)) return null;
+    return { type: envelope.type, senderId: envelope.senderId, ...(envelope.payload || {}) };
   }
 
   function setStatus(message, error = false) {
@@ -84,6 +153,8 @@ const BattleMode = (() => {
       ready,
       host: isHost,
       active,
+      protocol: BATTLE_PROTOCOL_VERSION,
+      publicKey: signingIdentity?.publicJwk || null,
       joinedAt: participants.find(p => p.id === clientId)?.joinedAt || Date.now()
     };
   }
@@ -93,19 +164,108 @@ const BattleMode = (() => {
     await channel.track(selfPresence());
   }
 
-  function send(type, payload = {}) {
-    if (!channel || !subscribed) return;
-    channel.send({
-      type: 'broadcast',
-      event: 'battle',
-      payload: { type, ...payload }
+  async function send(type, payload = {}) {
+    if (!channel || !subscribed || !signingIdentity) return false;
+    try {
+      const envelope = await createEnvelope(signingIdentity, clientId, type, payload);
+      const result = await channel.send({ type: 'broadcast', event: 'battle', payload: envelope });
+      return result === 'ok';
+    } catch (error) {
+      console.warn('Battle broadcast rechazado:', error);
+      return false;
+    }
+  }
+
+  function uplinkTopic(id) {
+    return 'battle:' + roomCode + ':uplink:' + id;
+  }
+
+  async function closeUplinks() {
+    const channels = [];
+    if (guestUplink) channels.push(guestUplink);
+    for (const value of hostUplinks.values()) channels.push(value);
+    guestUplink = null;
+    hostUplinks.clear();
+    await Promise.all(channels.map(async value => {
+      try { if (client) await client.removeChannel(value); } catch {}
+    }));
+  }
+
+  async function ensureGuestUplink() {
+    if (isHost || !client || !clientId || guestUplink) return;
+    const uplink = client.channel(uplinkTopic(clientId), { config: { broadcast: { self: false } } });
+    guestUplink = uplink;
+    uplink.subscribe(status => {
+      if (status === 'CHANNEL_ERROR' || status === 'TIMED_OUT') console.warn('Canal uplink no disponible:', status);
     });
+  }
+
+  async function ensureHostUplinks() {
+    if (!isHost || !client) return;
+    const wanted = new Set(presence.filter(p => p.id !== clientId && isCompatiblePresence(p)).map(p => p.id));
+    for (const [id, uplink] of hostUplinks) {
+      if (wanted.has(id)) continue;
+      hostUplinks.delete(id);
+      try { await client.removeChannel(uplink); } catch {}
+    }
+    for (const id of wanted) {
+      if (hostUplinks.has(id)) continue;
+      const uplink = client.channel(uplinkTopic(id), { config: { broadcast: { self: false } } });
+      hostUplinks.set(id, uplink);
+      uplink
+        .on('broadcast', { event: 'battle-uplink' }, ({ payload }) => handleUplink(payload, id).catch(console.warn))
+        .subscribe();
+    }
+  }
+
+  async function sendUplink(type, payload = {}) {
+    if (!guestUplink || !signingIdentity) return false;
+    try {
+      const envelope = await createEnvelope(signingIdentity, clientId, type, payload);
+      const result = await guestUplink.send({ type: 'broadcast', event: 'battle-uplink', payload: envelope });
+      return result === 'ok';
+    } catch (error) {
+      console.warn('Battle uplink rechazado:', error);
+      return false;
+    }
+  }
+
+  async function handleUplink(envelope, expectedSenderId) {
+    if (!isHost || !active) return;
+    const msg = await decodeEnvelope(envelope, expectedSenderId);
+    if (!msg) return;
+    if (msg.type === 'pose') applyGuestPose({ ...msg, id: msg.senderId });
+    else if (msg.type === 'shoot') authoritativeShoot(msg.senderId, msg.dir);
+  }
+
+  function clearHostGrace() {
+    clearTimeout(hostGraceTimer);
+    hostGraceTimer = null;
+    if (gameStatusEl?.textContent?.startsWith('ANFITRIÓN DESCONECTADO')) gameStatusEl.textContent = '';
+  }
+
+  function updateHostGrace() {
+    if (!active || isHost || !lockedHostId) return;
+    const hostPresent = presence.some(p => p.id === lockedHostId && p.host);
+    if (hostPresent) return clearHostGrace();
+    if (hostGraceTimer) return;
+    if (gameStatusEl) gameStatusEl.textContent = 'ANFITRIÓN DESCONECTADO · esperando 15s para reconectar';
+    hostGraceTimer = setTimeout(() => {
+      hostGraceTimer = null;
+      if (!active || isHost) return;
+      if (presence.some(p => p.id === lockedHostId && p.host)) return;
+      const ranking = [...state.values()].sort((a,b) => b.kills-a.kills || a.deaths-b.deaths);
+      endBattle(null, ranking);
+      resultEl.querySelector('.battle-result-title').textContent = 'Batalla interrumpida · el anfitrión no regresó';
+    }, HOST_GRACE_MS);
   }
 
   function updateLobby() {
     presence = participantsFromPresence();
     participants = new Map(presence.map(p => [p.id,p]));
-    roomActive = !!presence.find(p => p.host)?.active;
+    const compatibleHost = presence.find(p => p.host && isCompatiblePresence(p));
+    if (!lockedHostId && compatibleHost) lockedHostId = compatibleHost.id;
+    roomActive = !!presence.find(p => p.id === lockedHostId)?.active;
 
     if (!playersEl) return;
     playersEl.replaceChildren();
@@ -123,9 +283,10 @@ const BattleMode = (() => {
       label.className = 'battle-player-name';
       label.textContent = p.name + (p.host ? ' · HOST' : '');
 
+      const compatible = isCompatiblePresence(p);
       const rs = document.createElement('span');
-      rs.className = 'battle-ready-state ' + (p.ready ? 'ready' : '');
-      rs.textContent = p.ready ? 'LISTO' : 'ESPERANDO';
+      rs.className = 'battle-ready-state ' + (p.ready && compatible ? 'ready' : '');
+      rs.textContent = compatible ? (p.ready ? 'LISTO' : 'ESPERANDO') : 'ACTUALIZA';
 
       row.append(dot,label,rs);
       playersEl.appendChild(row);
@@ -136,9 +297,11 @@ const BattleMode = (() => {
     readyBtn.classList.toggle('active', ready);
     readyBtn.disabled = !participants.has(clientId) || active;
 
-    const allReady = presence.length >= MIN_PLAYERS &&
-      presence.length <= MAX_PLAYERS &&
-      presence.every(p => p.ready);
+    const compatiblePlayers = presence.filter(isCompatiblePresence);
+    const allReady = compatiblePlayers.length >= MIN_PLAYERS &&
+      compatiblePlayers.length <= MAX_PLAYERS &&
+      compatiblePlayers.length === presence.length &&
+      compatiblePlayers.every(p => p.ready);
     startBtn.disabled = !isHost || !allReady || active;
     startBtn.style.display = isHost ? 'inline-flex' : 'none';
 
@@ -151,6 +314,7 @@ const BattleMode = (() => {
 
   async function syncPresence() {
     updateLobby();
+    if (isHost) await ensureHostUplinks();
 
     if (isHost && presence.length > MAX_PLAYERS) {
       const overflow = presence.slice(MAX_PLAYERS).map(p => p.id);
@@ -167,14 +331,15 @@ const BattleMode = (() => {
     }
     if (active && isHost) {
       const presentIds = new Set(presence.map(p => p.id));
-      for (const [id,p] of state) {
-        if (!presentIds.has(id)) p.connected = false;
-      }
+      for (const [id,p] of state) p.connected = presentIds.has(id);
     }
+    updateHostGrace();
   }
 
   async function disconnect({ closeUi = false } = {}) {
     clearTimeout(presenceProbe);
+    clearHostGrace();
+    await closeUplinks();
     subscribed = false;
     active = false;
     roomActive = false;
@@ -185,6 +350,9 @@ const BattleMode = (() => {
     stopGame();
     participants.clear();
     presence = [];
+    lockedHostId = null;
+    reconnectingActive = false;
+    clearBattleSession();
     if (closeUi) hideRoot();
   }
 
@@ -193,22 +361,32 @@ const BattleMode = (() => {
     isHost = true;
     role = 'host';
     roomCode = makeRoomCode();
-    clientId = makeId();
     ready = false;
     active = false;
+    reconnectingActive = false;
+    await prepareSigningIdentity();
+    clientId = identityIdFromPublicJwk(signingIdentity.publicJwk);
+    lockedHostId = clientId;
+    saveBattleSession();
     await connect();
   }
 
   async function joinRoom(code) {
-    await disconnect();
     const normalized = String(code || '').trim();
-    if (!/^\d{6}$/.test(normalized)) throw new Error('Ingresa un código de 6 dígitos.');
+    if (!isBattleRoomCode(normalized)) throw new Error('Ingresa un código de 6 dígitos.');
+    const saved = loadBattleSession(normalized);
+    await disconnect();
     isHost = false;
     role = 'guest';
     roomCode = normalized;
-    clientId = makeId();
-    ready = false;
+    lockedHostId = saved?.lockedHostId || null;
+    ready = saved?.role === 'guest' ? !!saved.ready : false;
     active = false;
+    reconnectingActive = !!(saved?.role === 'guest' && saved.active);
+    if (saved?.name && reconnectingActive) name = cleanName(saved.name);
+    await prepareSigningIdentity(saved?.role === 'guest' ? saved : null);
+    clientId = identityIdFromPublicJwk(signingIdentity.publicJwk);
+    saveBattleSession({ active: reconnectingActive });
     await connect();
   }
 
@@ -226,7 +404,7 @@ const BattleMode = (() => {
     current
       .on('broadcast',{event:'battle'},({payload}) => {
         if (current !== channel) return;
-        handleMessage(payload);
+        handleMessage(payload).catch(console.warn);
       })
       .on('presence',{event:'sync'},() => {
         if (current !== channel) return;
@@ -238,6 +416,8 @@ const BattleMode = (() => {
           subscribed = true;
           if (isHost) {
             await trackSelf();
+            lockedHostId = clientId;
+            saveBattleSession();
             openLobby();
             setStatus('Sala ' + roomCode + ' creada · comparte el código.');
             updateLobby();
@@ -251,17 +431,24 @@ const BattleMode = (() => {
               const ps = participantsFromPresence();
               const host = ps.find(p => p.host);
               if (host) {
-                if (host.active) {
+                if (!isCompatiblePresence(host)) {
+                  setStatus('La sala usa una versión incompatible. Actualiza el juego en ambos dispositivos.', true);
+                  return;
+                }
+                lockedHostId = host.id;
+                if (host.active && !reconnectingActive) {
                   setStatus('Esa batalla ya está en curso.', true);
                   return;
                 }
-                if (ps.length >= MAX_PLAYERS) {
+                if (ps.length >= MAX_PLAYERS && !reconnectingActive) {
                   setStatus('La sala está llena (' + MAX_PLAYERS + '/' + MAX_PLAYERS + ').', true);
                   return;
                 }
                 await trackSelf();
+                await ensureGuestUplink();
+                saveBattleSession({ active: reconnectingActive });
                 openLobby();
-                setStatus('Entraste a la sala ' + roomCode + '.');
+                setStatus(reconnectingActive ? 'Reconectando a la batalla ' + roomCode + '…' : 'Entraste a la sala ' + roomCode + '.');
                 updateLobby();
                 return;
               }
@@ -281,21 +468,29 @@ const BattleMode = (() => {
       });
   }
 
-  function handleMessage(msg) {
-    if (!msg || !msg.type) return;
-    if (msg.type === 'battle_start') {
+  async function handleMessage(envelope) {
+    const msg = await decodeEnvelope(envelope);
+    if (!msg) return;
+
+    if (msg.type === 'battle_start' && !isHost) {
       active = true;
+      reconnectingActive = false;
       startedAt = msg.startedAt || Date.now();
       timeLeft = MATCH_SECONDS;
       initializeBattle(msg.players || []);
+      saveBattleSession({ active: true });
       trackSelf().catch(console.error);
-    } else if (msg.type === 'pose' && isHost && active) {
-      applyGuestPose(msg);
-    } else if (msg.type === 'shoot' && isHost && active) {
-      authoritativeShoot(msg.id, msg.dir);
-    } else if (msg.type === 'battle_state' && !isHost && active) {
-      applySnapshot(msg);
-    } else if (msg.type === 'battle_end' && active) {
+    } else if (msg.type === 'battle_state' && !isHost) {
+      if (!active && reconnectingActive && (msg.players || []).some(p => p.id === clientId)) {
+        active = true;
+        reconnectingActive = false;
+        startedAt = msg.startedAt || Date.now();
+        initializeBattle(msg.players || []);
+        saveBattleSession({ active: true });
+        trackSelf().catch(console.error);
+      }
+      if (active) applySnapshot(msg);
+    } else if (msg.type === 'battle_end' && !isHost && active) {
       endBattle(msg.winner, msg.players || []);
     } else if (msg.type === 'battle_reject' && Array.isArray(msg.ids) && msg.ids.includes(clientId)) {
       setStatus(msg.reason || 'No fue posible entrar a la sala.', true);
@@ -305,8 +500,9 @@ const BattleMode = (() => {
   }
 
   function startBattleAsHost() {
-    const ps = participantsFromPresence();
-    if (!isHost || active || ps.length < MIN_PLAYERS || ps.length > MAX_PLAYERS || !ps.every(p => p.ready)) return;
+    const raw = participantsFromPresence();
+    const ps = raw.filter(isCompatiblePresence);
+    if (!isHost || active || raw.length !== ps.length || ps.length < MIN_PLAYERS || ps.length > MAX_PLAYERS || !ps.every(p => p.ready)) return;
 
     active = true;
     startedAt = Date.now();
@@ -324,6 +520,7 @@ const BattleMode = (() => {
     });
 
     trackSelf().catch(console.error);
+    saveBattleSession({ active:true });
     const players = [...state.values()].map(p => ({...p}));
     send('battle_start',{startedAt,players});
     initializeBattle(players);
@@ -445,6 +642,7 @@ const BattleMode = (() => {
   function initializeBattle(initialPlayers) {
     stopGame(false);
     openGame();
+    saveBattleSession({ active:true });
     state = new Map(initialPlayers.map(p => [p.id,{...p}]));
     buildArena();
     meshes.clear();
@@ -474,7 +672,9 @@ const BattleMode = (() => {
   function stopGame(cancelFrame = true) {
     if (cancelFrame && frameId) cancelAnimationFrame(frameId);
     frameId = null;
+    if (scene) disposeObject3D(scene);
     if (renderer) {
+      renderer.renderLists?.dispose?.();
       renderer.dispose();
       renderer.domElement?.remove();
     }
@@ -572,7 +772,7 @@ const BattleMode = (() => {
     lastLocalShot = now;
     const dir = {...localFacing};
     if (isHost) authoritativeShoot(clientId,dir);
-    else send('shoot',{id:clientId,dir});
+    else sendUplink('shoot',{dir});
   }
 
   function updateProjectiles(dt) {
@@ -677,12 +877,16 @@ const BattleMode = (() => {
     const ranking=[...state.values()].sort((a,b)=>b.kills-a.kills || a.deaths-b.deaths || a.name.localeCompare(b.name));
     const win=forcedWinner || ranking[0] || null;
     active=false;
+    saveBattleSession({ active:false });
     send('battle_end',{winner:win,players:ranking});
     endBattle(win,ranking);
   }
 
   function endBattle(win,ranking) {
     active=false;
+    reconnectingActive=false;
+    clearHostGrace();
+    saveBattleSession({ active:false });
     winner=win;
     if (frameId) cancelAnimationFrame(frameId);
     frameId=null;
@@ -713,7 +917,7 @@ const BattleMode = (() => {
       return;
     }
     stateTimer+=dt;
-    if (stateTimer>=.1) {
+    if (stateTimer>=STATE_INTERVAL) {
       stateTimer=0;
       sendSnapshot();
     }
@@ -768,9 +972,9 @@ const BattleMode = (() => {
   function sendPose(dt) {
     if (isHost || !active || !localMesh) return;
     poseTimer+=dt;
-    if (poseTimer<.05) return;
+    if (poseTimer<POSE_INTERVAL) return;
     poseTimer=0;
-    send('pose',{id:clientId,x:localMesh.position.x,z:localMesh.position.z,angle:localMesh.rotation.y});
+    sendUplink('pose',{x:localMesh.position.x,z:localMesh.position.z,angle:localMesh.rotation.y});
   }
 
   function updateCamera() {
@@ -931,7 +1135,7 @@ const BattleMode = (() => {
         await joinRoom(root.querySelector('#battle-code-input').value);
       }catch(e){setStatus(e.message,true);}
     };
-    readyBtn.onclick=async()=>{ready=!ready;await trackSelf();updateLobby();};
+    readyBtn.onclick=async()=>{ready=!ready;await trackSelf();saveBattleSession();updateLobby();};
     startBtn.onclick=startBattleAsHost;
     root.querySelector('#battle-copy').onclick=async()=>{
       const url=new URL(location.href);
@@ -995,10 +1199,16 @@ const BattleMode = (() => {
     btn.onclick=showRoot;
 
     const invite=new URLSearchParams(location.search).get('batalla');
-    if(/^\d{6}$/.test(invite||'')){
+    if(isBattleRoomCode(invite||'')){
+      const saved=loadBattleSession(invite);
       showRoot();
       root.querySelector('#battle-code-input').value=invite;
-      setStatus('Invitación de batalla detectada · escribe tu nombre y presiona Unirse.');
+      if(saved?.role==='guest' && saved.active){
+        root.querySelector('#battle-name').value=cleanName(saved.name || root.querySelector('#battle-name').value);
+        setStatus('Sesión de batalla detectada · presiona Unirse para reconectar.');
+      }else{
+        setStatus('Invitación de batalla detectada · escribe tu nombre y presiona Unirse.');
+      }
     }
   }
 
