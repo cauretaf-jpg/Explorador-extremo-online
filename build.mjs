@@ -16,6 +16,8 @@ await build({ entryPoints: [path.join(root, 'src/multiplayer/session.js')], bund
   format: 'iife', platform: 'browser', outfile: path.join(dist, 'network-session.js') });
 await build({ entryPoints: [path.join(root, 'src/levels/config.js')], bundle: true, minify: true,
   format: 'iife', platform: 'browser', outfile: path.join(dist, 'levels-config.js') });
+await build({ entryPoints: [path.join(root, 'src/progression/config.js')], bundle: true, minify: true,
+  format: 'iife', platform: 'browser', outfile: path.join(dist, 'progression-config.js') });
 const defaults = JSON.parse(fs.readFileSync(path.join(root, 'supabase.public.json'), 'utf8'));
 const config = {
   url: process.env.SUPABASE_URL || defaults.url,
