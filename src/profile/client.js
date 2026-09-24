@@ -1,4 +1,5 @@
 const STORAGE_KEY = 'explorador-player-identity-v13';
+const PENDING_KEY = 'explorador-pending-matches-v13';
 
 function loadIdentity() {
   try {
@@ -20,6 +21,25 @@ function createIdentity() {
 
 function saveIdentity(identity) {
   localStorage.setItem(STORAGE_KEY, JSON.stringify(identity));
+}
+
+function loadPendingMatches() {
+  try {
+    const items = JSON.parse(localStorage.getItem(PENDING_KEY) || '[]');
+    return Array.isArray(items) ? items.filter(item => item?.match_id) : [];
+  } catch {
+    return [];
+  }
+}
+
+function savePendingMatches(items) {
+  localStorage.setItem(PENDING_KEY, JSON.stringify(items.slice(-20)));
+}
+
+function queuePendingMatch(match) {
+  const items = loadPendingMatches();
+  if (!items.some(item => item.match_id === match.match_id)) items.push(match);
+  savePendingMatches(items);
 }
 
 function cleanName(value) {
@@ -46,7 +66,8 @@ function createProfileClient() {
       async recordMatch() { return null; },
       async getProfile() { return null; },
       async getLeaderboard() { return []; },
-      async getRank() { return null; }
+      async getRank() { return null; },
+      async flushPendingMatches() { return 0; }
     };
   }
 
@@ -93,32 +114,34 @@ function createProfileClient() {
   async function ensureProfile(preferredName = '') {
     if (creating) return creating;
     creating = (async () => {
-      if (!identity) return register(preferredName || defaultName());
-
-      const existing = await fetchProfile(identity.id);
-      if (existing) {
-        profile = existing;
-        return profile;
-      }
-
-      try {
-        return await invoke({
-          action: 'register',
-          player_id: identity.id,
-          secret: identity.secret,
-          display_name: cleanName(preferredName) || defaultName()
-        }).then(data => {
-          profile = data.profile;
-          return profile;
-        });
-      } catch (error) {
-        if (error.code === 'profile_exists') {
-          identity = null;
-          localStorage.removeItem(STORAGE_KEY);
-          return register(preferredName || defaultName());
+      if (!identity) {
+        profile = await register(preferredName || defaultName());
+      } else {
+        const existing = await fetchProfile(identity.id);
+        if (existing) {
+          profile = existing;
+        } else {
+          try {
+            const data = await invoke({
+              action: 'register',
+              player_id: identity.id,
+              secret: identity.secret,
+              display_name: cleanName(preferredName) || defaultName()
+            });
+            profile = data.profile;
+          } catch (error) {
+            if (error.code === 'profile_exists') {
+              identity = null;
+              localStorage.removeItem(STORAGE_KEY);
+              profile = await register(preferredName || defaultName());
+            } else {
+              throw error;
+            }
+          }
         }
-        throw error;
       }
+      await flushPendingMatches().catch(() => 0);
+      return profile;
     })();
 
     try {
@@ -143,8 +166,7 @@ function createProfileClient() {
     return profile;
   }
 
-  async function recordMatch(match) {
-    await ensureProfile(profile?.display_name || defaultName());
+  async function sendMatch(match) {
     const data = await invoke({
       action: 'record_match',
       player_id: identity.id,
@@ -153,6 +175,39 @@ function createProfileClient() {
     });
     profile = data.profile;
     return profile;
+  }
+
+  async function flushPendingMatches() {
+    if (!identity) return 0;
+    const pending = loadPendingMatches();
+    if (!pending.length) return 0;
+
+    const remaining = [];
+    let sent = 0;
+    for (const match of pending) {
+      try {
+        await sendMatch(match);
+        sent++;
+      } catch {
+        remaining.push(match);
+      }
+    }
+    savePendingMatches(remaining);
+    return sent;
+  }
+
+  async function recordMatch(match) {
+    await ensureProfile(profile?.display_name || defaultName());
+    const payload = {
+      ...match,
+      match_id: match?.match_id || crypto.randomUUID()
+    };
+    try {
+      return await sendMatch(payload);
+    } catch (error) {
+      queuePendingMatch(payload);
+      throw error;
+    }
   }
 
   async function getProfile() {
@@ -193,6 +248,7 @@ function createProfileClient() {
     getProfile,
     getLeaderboard,
     getRank,
+    flushPendingMatches,
     get identity() { return identity; },
     get cachedProfile() { return profile; }
   };
