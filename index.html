@@ -626,7 +626,7 @@
     <div id="menu-screen" class="overlay">
         <h1>Explorador Extremo 3D</h1>
         <div class="author-tag">Autor del Juego: Profesor Juan Neira</div>
-        <div class="subtitle">V13 · Perfiles, estadísticas y ranking</div>
+        <div class="subtitle">V13.1 · Logros e insignias</div>
         <button class="btn" id="btn-start">Jugar solo</button>
 
         <div id="online-entry">
@@ -1676,9 +1676,9 @@
                 maxLevel: 1,
                 levelsCompleted: 0,
                 players: {
-                    solo: { enemiesDefeated: 0, revives: 0 },
-                    host: { enemiesDefeated: 0, revives: 0 },
-                    guest: { enemiesDefeated: 0, revives: 0 }
+                    solo: { enemiesDefeated: 0, revives: 0, bossesDefeated: 0 },
+                    host: { enemiesDefeated: 0, revives: 0, bossesDefeated: 0 },
+                    guest: { enemiesDefeated: 0, revives: 0, bossesDefeated: 0 }
                 }
             };
         }
@@ -3110,19 +3110,24 @@
             LocalMatchRecord.submitted = true;
 
             const role = localCombatRole();
-            const playerStats = Game.matchStats?.players?.[role] || { enemiesDefeated: 0, revives: 0 };
+            const playerStats = Game.matchStats?.players?.[role] || { enemiesDefeated: 0, revives: 0, bossesDefeated: 0 };
             const match = {
                 match_id: LocalMatchRecord.id,
+                mode: Net.role === 'solo' ? 'solo' : 'coop',
                 won: !!won,
                 score: Math.max(0, Math.floor(Game.score || 0)),
                 time_seconds: Math.max(1, Math.floor(Game.time || 1)),
                 max_level: Math.max(1, Math.min(11, Math.floor(Game.matchStats?.maxLevel || Math.min(Game.level, 11) || 1))),
                 enemies_defeated: Math.max(0, Math.floor(playerStats.enemiesDefeated || 0)),
                 revives: Math.max(0, Math.floor(playerStats.revives || 0)),
+                bosses_defeated: Math.max(0, Math.floor(playerStats.bossesDefeated || 0)),
                 levels_completed: Math.max(0, Math.min(11, Math.floor(Game.matchStats?.levelsCompleted || 0)))
             };
 
-            ProfileClient.recordMatch(match).then(() => {
+            ProfileClient.recordMatch(match).then(result => {
+                if (result?.unlockedAchievements?.length) {
+                    window.ExploradorProfileUI?.showAchievementToast?.(result.unlockedAchievements);
+                }
                 ProfilePanel?.refresh?.().catch?.(() => {});
             }).catch(error => {
                 console.warn('La partida quedó en cola para sincronizar estadísticas:', error);
@@ -3963,6 +3968,9 @@
                             }
 
                             if (enemy.isBoss) {
+                                if (Game.matchStats.players[killerRole]) {
+                                    Game.matchStats.players[killerRole].bossesDefeated++;
+                                }
                                 Game.bossDefeated = true;
                                 Game.boss = null;
                                 addScore(Combat.combatRules.boss.score);

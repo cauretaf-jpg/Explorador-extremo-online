@@ -21,6 +21,65 @@ function createStat(label, value) {
   return item;
 }
 
+function showAchievementToast(achievements = []) {
+  if (!Array.isArray(achievements) || !achievements.length) return;
+
+  let host = document.getElementById('achievement-toast-host');
+  if (!host) {
+    host = document.createElement('div');
+    host.id = 'achievement-toast-host';
+    document.body.appendChild(host);
+  }
+
+  achievements.forEach((achievement, index) => {
+    setTimeout(() => {
+      const toast = document.createElement('div');
+      toast.className = 'achievement-toast';
+      toast.innerHTML = `
+        <div class="achievement-toast-icon">${achievement.icon || '🏆'}</div>
+        <div class="achievement-toast-copy">
+          <div class="achievement-toast-kicker">LOGRO DESBLOQUEADO</div>
+          <strong>${achievement.title || 'Nuevo logro'}</strong>
+          <span>${achievement.description || ''}</span>
+        </div>
+        <div class="achievement-toast-points">+${achievement.points || 0}</div>`;
+      host.appendChild(toast);
+      requestAnimationFrame(() => toast.classList.add('show'));
+      setTimeout(() => {
+        toast.classList.remove('show');
+        setTimeout(() => toast.remove(), 420);
+      }, 4200);
+    }, index * 850);
+  });
+}
+
+function createAchievementCard(definition, unlockedMap) {
+  const unlocked = unlockedMap.get(definition.id);
+  const card = document.createElement('article');
+  card.className = 'achievement-card' + (unlocked ? ' unlocked' : ' locked');
+
+  const icon = document.createElement('div');
+  icon.className = 'achievement-icon';
+  icon.textContent = unlocked ? definition.icon : '🔒';
+
+  const body = document.createElement('div');
+  body.className = 'achievement-copy';
+
+  const title = document.createElement('strong');
+  title.textContent = definition.title;
+  const description = document.createElement('span');
+  description.textContent = definition.description;
+
+  const meta = document.createElement('small');
+  meta.textContent = unlocked
+    ? 'Desbloqueado · +' + definition.points + ' pts'
+    : definition.category.toUpperCase() + ' · ' + definition.points + ' pts';
+
+  body.append(title, description, meta);
+  card.append(icon, body);
+  return card;
+}
+
 function createProfilePanel({ profileClient, onNameChanged } = {}) {
   const start = document.getElementById('btn-start');
   if (!start || !profileClient) return null;
@@ -29,7 +88,7 @@ function createProfilePanel({ profileClient, onNameChanged } = {}) {
   button.type = 'button';
   button.className = 'btn profile-open-button';
   button.id = 'btn-profile-ranking';
-  button.textContent = 'Perfil y Ranking';
+  button.textContent = 'Perfil, Ranking y Logros';
   start.insertAdjacentElement('afterend', button);
 
   const overlay = document.createElement('div');
@@ -40,7 +99,7 @@ function createProfilePanel({ profileClient, onNameChanged } = {}) {
       <div class="profile-heading">
         <div>
           <h2>Perfil de Explorador</h2>
-          <div class="profile-subtitle">Estadísticas persistentes y ranking global</div>
+          <div class="profile-subtitle">Estadísticas, ranking global e insignias persistentes</div>
         </div>
         <button type="button" id="profile-close" class="profile-close" aria-label="Cerrar">×</button>
       </div>
@@ -57,17 +116,29 @@ function createProfilePanel({ profileClient, onNameChanged } = {}) {
         <section class="profile-card leaderboard-card">
           <div class="leaderboard-title">Top 20 · Mejor puntaje</div>
           <div class="leaderboard-head">
-            <span>#</span><span>Explorador</span><span>Puntaje</span><span>Victorias</span><span>Tiempo</span>
+            <span>#</span><span>Explorador</span><span>Puntaje</span><span>Victorias</span><span>Logros</span><span>Tiempo</span>
           </div>
           <div id="leaderboard-list"></div>
         </section>
       </div>
+      <section class="profile-card achievements-card">
+        <div class="achievements-heading">
+          <div>
+            <div class="leaderboard-title">Logros e insignias</div>
+            <div id="achievement-summary" class="achievement-summary">0/0 desbloqueados</div>
+          </div>
+          <div class="achievement-legend">Exploración · Combate · Cooperación · Maestría</div>
+        </div>
+        <div id="achievement-list" class="achievement-grid"></div>
+      </section>
     </div>`;
   document.body.appendChild(overlay);
 
   const message = overlay.querySelector('#profile-message');
   const stats = overlay.querySelector('#profile-stats');
   const list = overlay.querySelector('#leaderboard-list');
+  const achievementList = overlay.querySelector('#achievement-list');
+  const achievementSummary = overlay.querySelector('#achievement-summary');
   const input = overlay.querySelector('#profile-name-input');
   const rankEl = overlay.querySelector('#profile-rank');
   const save = overlay.querySelector('#profile-save-name');
@@ -86,6 +157,7 @@ function createProfilePanel({ profileClient, onNameChanged } = {}) {
       createStat('Enemigos derrotados', number(profile?.enemies_defeated)),
       createStat('Reanimaciones', number(profile?.revives)),
       createStat('Niveles completados', number(profile?.levels_completed)),
+      createStat('Logros', number(profile?.achievement_count)),
       createStat('Puntaje acumulado', number(profile?.total_score))
     );
   }
@@ -105,9 +177,11 @@ function createProfilePanel({ profileClient, onNameChanged } = {}) {
       score.textContent = number(row.best_score);
       const wins = document.createElement('span');
       wins.textContent = number(row.wins);
+      const achievements = document.createElement('span');
+      achievements.textContent = '🏆 ' + number(row.achievement_count);
       const time = document.createElement('span');
       time.textContent = fmtTime(row.best_time_seconds);
-      entry.append(rank, name, score, wins, time);
+      entry.append(rank, name, score, wins, achievements, time);
       list.appendChild(entry);
     });
 
@@ -119,6 +193,20 @@ function createProfilePanel({ profileClient, onNameChanged } = {}) {
     }
   }
 
+  function renderAchievements(data) {
+    const definitions = data?.definitions || [];
+    const unlocked = data?.unlocked || [];
+    const unlockedMap = new Map(unlocked.map(item => [item.achievement_id, item]));
+    const points = definitions
+      .filter(definition => unlockedMap.has(definition.id))
+      .reduce((sum, definition) => sum + Number(definition.points || 0), 0);
+    achievementSummary.textContent =
+      unlocked.length + '/' + definitions.length + ' desbloqueados · ' + points + ' pts';
+    achievementList.replaceChildren(
+      ...definitions.map(definition => createAchievementCard(definition, unlockedMap))
+    );
+  }
+
   async function refresh() {
     if (loading) return;
     loading = true;
@@ -126,12 +214,14 @@ function createProfilePanel({ profileClient, onNameChanged } = {}) {
     save.disabled = true;
     try {
       const profile = await profileClient.ensureProfile(input.value);
-      const [rank, leaderboard] = await Promise.all([
+      const [rank, leaderboard, achievements] = await Promise.all([
         profileClient.getRank(),
-        profileClient.getLeaderboard(20)
+        profileClient.getLeaderboard(20),
+        profileClient.getAchievements()
       ]);
       renderProfile(profile, rank);
       renderLeaderboard(leaderboard, profileClient.identity?.id);
+      renderAchievements(achievements);
       message.textContent = '';
     } catch (error) {
       console.error('Perfil:', error);
@@ -157,6 +247,7 @@ function createProfilePanel({ profileClient, onNameChanged } = {}) {
     try {
       const profile = await profileClient.rename(input.value);
       onNameChanged?.(profile.display_name);
+      loading = false;
       await refresh();
       message.textContent = 'Nombre actualizado.';
     } catch (error) {
@@ -177,4 +268,4 @@ function createProfilePanel({ profileClient, onNameChanged } = {}) {
   };
 }
 
-window.ExploradorProfileUI = { createProfilePanel };
+window.ExploradorProfileUI = { createProfilePanel, showAchievementToast };

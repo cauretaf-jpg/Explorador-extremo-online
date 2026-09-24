@@ -67,6 +67,7 @@ function createProfileClient() {
       async getProfile() { return null; },
       async getLeaderboard() { return []; },
       async getRank() { return null; },
+      async getAchievements() { return { definitions: [], unlocked: [] }; },
       async flushPendingMatches() { return 0; }
     };
   }
@@ -91,7 +92,7 @@ function createProfileClient() {
     if (!id) return null;
     const { data, error } = await supabase
       .from('player_profiles')
-      .select('id,display_name,games_played,wins,best_score,best_time_seconds,max_level,enemies_defeated,revives,levels_completed,total_score,created_at,updated_at')
+      .select('id,display_name,games_played,wins,best_score,best_time_seconds,max_level,enemies_defeated,revives,levels_completed,total_score,achievement_count,created_at,updated_at')
       .eq('id', id)
       .maybeSingle();
     if (error) throw error;
@@ -174,7 +175,10 @@ function createProfileClient() {
       match
     });
     profile = data.profile;
-    return profile;
+    return {
+      profile,
+      unlockedAchievements: data.unlocked_achievements || []
+    };
   }
 
   async function flushPendingMatches() {
@@ -220,7 +224,7 @@ function createProfileClient() {
     const safeLimit = Math.max(1, Math.min(50, Math.floor(limit)));
     const { data, error } = await supabase
       .from('player_profiles')
-      .select('id,display_name,games_played,wins,best_score,best_time_seconds,max_level,enemies_defeated,revives,levels_completed,total_score')
+      .select('id,display_name,games_played,wins,best_score,best_time_seconds,max_level,enemies_defeated,revives,levels_completed,total_score,achievement_count')
       .order('best_score', { ascending: false })
       .order('wins', { ascending: false })
       .order('best_time_seconds', { ascending: true, nullsFirst: false })
@@ -240,6 +244,29 @@ function createProfileClient() {
     return (count || 0) + 1;
   }
 
+  async function getAchievements() {
+    await ensureProfile();
+    const [definitionsResult, unlockedResult] = await Promise.all([
+      supabase
+        .from('achievement_definitions')
+        .select('id,title,description,category,icon,points,sort_order')
+        .order('sort_order', { ascending: true }),
+      supabase
+        .from('player_achievements')
+        .select('achievement_id,unlocked_at,match_id')
+        .eq('player_id', identity.id)
+        .order('unlocked_at', { ascending: false })
+    ]);
+
+    if (definitionsResult.error) throw definitionsResult.error;
+    if (unlockedResult.error) throw unlockedResult.error;
+
+    return {
+      definitions: definitionsResult.data || [],
+      unlocked: unlockedResult.data || []
+    };
+  }
+
   return {
     available: true,
     ensureProfile,
@@ -248,6 +275,7 @@ function createProfileClient() {
     getProfile,
     getLeaderboard,
     getRank,
+    getAchievements,
     flushPendingMatches,
     get identity() { return identity; },
     get cachedProfile() { return profile; }

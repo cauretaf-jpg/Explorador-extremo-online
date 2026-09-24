@@ -1,6 +1,6 @@
 # Roadmap de desarrollo · Explorador Extremo Online
 
-Estado actualizado para V13.
+Estado actualizado para V13.1.
 
 | Prioridad | Mejora | Estado | Siguiente objetivo |
 |---|---|---|---|
@@ -12,7 +12,7 @@ Estado actualizado para V13.
 | 6 | Mejor progresión | Implementado / expansión | Objetivos 1–11 y mejoras entre niveles; se puede profundizar con más eventos exclusivos |
 | 7 | Ranking y perfiles | Implementado / validación | Perfiles locales persistentes, estadísticas, Top 20 y escritura segura mediante Edge Function |
 | 8 | Modo móvil | Implementado / validación | Probar en Android/iOS y ajustar tamaños/sensibilidad según dispositivo |
-| 9 | Logros y desafíos | Pendiente | Sistema persistente de objetivos |
+| 9 | Logros y desafíos | Parcial / logros implementados | 20 logros persistentes listos; siguiente paso: desafíos diarios/semanales y recompensas rotativas |
 | 10 | Pulido audiovisual | Parcial | Feedback de impacto, menús y audio |
 
 ## Entregas
@@ -70,13 +70,22 @@ Estado actualizado para V13.
 - RLS y permisos de mínimo privilegio.
 - Registro idempotente y cola local de reintentos.
 
+### V13.1
+- 20 logros persistentes.
+- Insignias visibles en el perfil.
+- Puntos de logros.
+- Notificaciones de desbloqueo.
+- Contador de logros en ranking.
+- Retrocompatibilidad con perfiles V13.
+- Evaluación e inserción idempotente desde Supabase.
+
 ## Próximas versiones propuestas
 
-### V13.1 · Logros y desafíos
-- Logros persistentes basados en estadísticas.
-- Desafíos por bioma y combate.
-- Insignias visibles en el perfil.
-- Retos diarios/semanales opcionales.
+### V13.2 · Desafíos rotativos
+- Desafíos diarios y semanales.
+- Retos por bioma, combate y cooperación.
+- Recompensas de perfil y cosméticos.
+- Historial de desafíos completados.
 
 ### V14 · Cuenta opcional
 - Supabase Auth para migrar el perfil local a una cuenta.
