@@ -3108,7 +3108,6 @@
             if (performance.now() >= p.reloadUntil[role]) {
                 p.reloadUntil[role] = 0;
                 p.ammo[role] = p.weapon.magazineSize;
-                updateWeaponHUD();
             }
         }
 
@@ -3233,6 +3232,7 @@
             AudioEngine.stopAmbient();
             document.getElementById('victory-time').innerText = formatTime(Game.time);
             document.getElementById('victory-score').innerText = Game.score;
+            document.getElementById('upgrade-screen').style.display = 'none';
             document.getElementById('victory-screen').style.display = 'flex';
             if (Net.role === 'host') { Net.frame = 1; Net.sendState(0); }
             if (Net.role !== 'solo') Net.persistSession({ inGame:false });
@@ -3571,6 +3571,115 @@
             updateWeaponHUD();
         }
 
+        function updateLevelObjective() {
+            const profile = Progression.getLevelProfile(Game.level);
+            document.getElementById('level-objective-title').textContent =
+                'Nivel ' + Game.level + ' · ' + profile.title;
+            document.getElementById('level-objective-text').textContent = profile.objective;
+        }
+
+        function updateWeaponHUD() {
+            if (!Game.progression) return;
+            const p = Game.progression;
+            const role = localCombatRole();
+            const now = performance.now();
+            for (const r of ['solo','host','guest']) {
+                if (p.reloadUntil[r] && now >= p.reloadUntil[r]) {
+                    p.reloadUntil[r] = 0;
+                    p.ammo[r] = p.weapon.magazineSize;
+                }
+            }
+            document.getElementById('weapon-name').textContent =
+                p.weapon.name + ' · DMG ' + p.weapon.damage;
+            document.getElementById('weapon-ammo').textContent =
+                (p.ammo[role] ?? 0) + '/' + p.weapon.magazineSize;
+            const remaining = p.reloadUntil[role]
+                ? Math.max(0, (p.reloadUntil[role] - now) / 1000)
+                : 0;
+            document.getElementById('weapon-status').textContent =
+                remaining > 0 ? 'RECARGANDO ' + remaining.toFixed(1) + 's' : 'LISTO';
+        }
+
+        function updateUpgradeScreen() {
+            const screen = document.getElementById('upgrade-screen');
+            if (!Game.progressionPaused || !Game.pendingUpgradeLevel) {
+                screen.style.display = 'none';
+                return;
+            }
+
+            screen.style.display = 'flex';
+            document.getElementById('upgrade-subtitle').textContent =
+                'Nivel ' + Game.pendingUpgradeLevel + ' superado · prepara el equipo para el nivel ' + Game.level;
+
+            const options = document.getElementById('upgrade-options');
+            const waiting = document.getElementById('upgrade-waiting');
+            const canChoose = Net.role !== 'guest';
+            const choices = Progression.getUpgradeChoices(Game.level);
+            options.innerHTML = '';
+
+            for (const upgrade of choices) {
+                const button = document.createElement('button');
+                button.type = 'button';
+                button.className = 'upgrade-card';
+                button.disabled = !canChoose;
+                button.innerHTML =
+                    '<strong>' + upgrade.name + '</strong>' +
+                    '<span>' + upgrade.description + '</span>';
+                button.onclick = () => chooseTeamUpgrade(upgrade.id);
+                options.appendChild(button);
+            }
+
+            waiting.textContent = canChoose
+                ? 'La mejora se aplica a toda la expedición.'
+                : 'Esperando que el anfitrión elija la mejora del equipo…';
+        }
+
+        function chooseTeamUpgrade(id) {
+            if (!Game.progressionPaused || Net.role === 'guest') return;
+            const upgrade = Progression.applyUpgrade(Game.progression, id);
+            if (!upgrade) return;
+
+            Game.maxHealth = Game.progression.maxHealth || Game.maxHealth;
+            for (const role of ['solo','host','guest']) {
+                Game.health[role] = Math.min(Game.maxHealth, Game.health[role] ?? Game.maxHealth);
+            }
+
+            Game.progressionPaused = false;
+            Game.pendingUpgradeLevel = null;
+            document.getElementById('upgrade-screen').style.display = 'none';
+            Net.status(Net.role === 'solo'
+                ? 'Mejora aplicada: ' + upgrade.name
+                : 'Mejora de equipo aplicada: ' + upgrade.name);
+            startNewLevel();
+            if (Net.role === 'host') {
+                Net.frame = 1;
+                Net.sendState(0);
+            }
+        }
+
+        function completeLevel() {
+            if (Game.progressionPaused) return;
+
+            const completedLevel = Game.level;
+            const profile = Progression.getLevelProfile(completedLevel);
+            addScore(profile.reward || 0);
+            Game.portalCharge = 0;
+            Game.level++;
+
+            if (Game.level > 11) {
+                triggerVictory();
+                return;
+            }
+
+            Game.pendingUpgradeLevel = completedLevel;
+            Game.progressionPaused = true;
+            updateUpgradeScreen();
+            if (Net.role === 'host') {
+                Net.frame = 1;
+                Net.sendState(0);
+            }
+        }
+
         function formatTime(sec) {
             let m = Math.floor(sec / 60).toString().padStart(2, '0');
             let s = (sec % 60).toString().padStart(2, '0');
@@ -3619,6 +3728,7 @@
             AudioEngine.stopAmbient();
             document.getElementById('final-time').innerText = formatTime(Game.time);
             document.getElementById('final-score').innerText = Game.score;
+            document.getElementById('upgrade-screen').style.display = 'none';
             document.getElementById('game-over-screen').style.display = 'flex';
             if (Net.role === 'host') { Net.frame = 1; Net.sendState(0); }
             if (Net.role !== 'solo') Net.persistSession({ inGame:false });
@@ -3834,6 +3944,7 @@
             camera.lookAt(playerMesh.position.x, playerMesh.position.y + 0.6, playerMesh.position.z);
             updateTeammateMarker();
             updateReviveUI();
+            updateWeaponHUD();
 
             if (Net.role === 'guest') {
                 Net.sendPose(delta);
@@ -4239,6 +4350,9 @@
             syncCoopPlateVisuals();
             updateHUD();
             updateBossHUD(snapshot?.boss);
+            updateLevelObjective();
+            updateWeaponHUD();
+            updateUpgradeScreen();
             document.getElementById('lobby-panel').style.display = 'none';
             document.getElementById('online-entry').style.display = 'none';
             updateCoopObjective(
@@ -4292,6 +4406,8 @@
             Game.cameraOrbit.radius = 16; 
             
             updateHUD();
+            updateLevelObjective();
+            updateWeaponHUD();
             startNewLevel();
             Game.isReady = true;
         }
