@@ -1581,8 +1581,8 @@
                 if (!this.remote || !Game.isReady) return;
                 this.remoteInteract = !!pose.interact;
                 if (Game.coopDowned.guest) return;
-                const elapsed = Math.min(0.25, (performance.now() - (this.lastPose || performance.now())) / 1000);
-                this.lastPose = performance.now();
+                const elapsed = Math.min(0.25, (Date.now() - (this.lastPose || Date.now())) / 1000);
+                this.lastPose = Date.now();
                 const distance = Math.hypot(pose.x - this.remote.position.x, pose.z - this.remote.position.z);
                 if (distance > 3 + elapsed * 12 || checkMazeCollision(pose.x, pose.z)) return;
                 this.remote.position.set(pose.x, 0, pose.z); this.remote.rotation.y = pose.angle;
@@ -1643,7 +1643,7 @@
                     gameOver: Game.gameOver
                 };
 
-                const now = performance.now();
+                const now = Date.now();
                 if (now - this.lastSnapshotAt >= 1000) {
                     this.lastSnapshotAt = now;
                     this.persistSession({
@@ -1667,8 +1667,14 @@
                     } else if (!state.gameOver && this.role === 'guest') document.getElementById('btn-start').click();
                     return;
                 }
-                if (state.level !== Game.level || !this.readyLevel) {
-                    Game.level = state.level; startNewLevel(); this.readyLevel = state.level;
+                if (state.progressionPaused) {
+                    Game.level = state.level;
+                    this.readyLevel = null;
+                    updateLevelObjective();
+                } else if (state.level !== Game.level || !this.readyLevel) {
+                    Game.level = state.level;
+                    startNewLevel();
+                    this.readyLevel = state.level;
                 }
                 if (!this.remote) {
                     this.remote = playerMesh.clone(true);
@@ -3105,7 +3111,7 @@
         function finishReload(role) {
             const p = Game.progression;
             if (!p.reloadUntil[role]) return;
-            if (performance.now() >= p.reloadUntil[role]) {
+            if (Date.now() >= p.reloadUntil[role]) {
                 p.reloadUntil[role] = 0;
                 p.ammo[role] = p.weapon.magazineSize;
             }
@@ -3119,7 +3125,7 @@
             const p = Game.progression;
             finishReload(role);
             if (p.reloadUntil[role] || p.ammo[role] >= p.weapon.magazineSize) return;
-            p.reloadUntil[role] = performance.now() + p.weapon.reloadTime * 1000;
+            p.reloadUntil[role] = Date.now() + p.weapon.reloadTime * 1000;
             updateWeaponHUD();
         }
 
@@ -3127,7 +3133,7 @@
             const role = weaponRoleForShooter(shooter);
             const p = Game.progression;
             finishReload(role);
-            const now = performance.now();
+            const now = Date.now();
             if (p.reloadUntil[role]) return;
             if (p.ammo[role] <= 0) {
                 reloadWeapon(role);
@@ -3582,7 +3588,7 @@
             if (!Game.progression) return;
             const p = Game.progression;
             const role = localCombatRole();
-            const now = performance.now();
+            const now = Date.now();
             for (const r of ['solo','host','guest']) {
                 if (p.reloadUntil[r] && now >= p.reloadUntil[r]) {
                     p.reloadUntil[r] = 0;
@@ -3636,7 +3642,7 @@
 
         function chooseTeamUpgrade(id) {
             if (!Game.progressionPaused || Net.role === 'guest') return;
-            const upgrade = Progression.applyUpgrade(Game.progression, id);
+            const upgrade = Progression.applyUpgrade(Game.progression, id, Game);
             if (!upgrade) return;
 
             Game.maxHealth = Game.progression.maxHealth || Game.maxHealth;
