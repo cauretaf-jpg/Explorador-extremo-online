@@ -92,7 +92,7 @@ function createProfileClient() {
     if (!id) return null;
     const { data, error } = await supabase
       .from('player_profiles')
-      .select('id,display_name,games_played,wins,best_score,best_time_seconds,max_level,enemies_defeated,revives,levels_completed,total_score,achievement_count,achievement_count,created_at,updated_at')
+      .select('id,display_name,games_played,wins,best_score,best_time_seconds,max_level,enemies_defeated,revives,levels_completed,total_score,achievement_count,created_at,updated_at')
       .eq('id', id)
       .maybeSingle();
     if (error) throw error;
@@ -224,7 +224,7 @@ function createProfileClient() {
     const safeLimit = Math.max(1, Math.min(50, Math.floor(limit)));
     const { data, error } = await supabase
       .from('player_profiles')
-      .select('id,display_name,games_played,wins,best_score,best_time_seconds,max_level,enemies_defeated,revives,levels_completed,total_score')
+      .select('id,display_name,games_played,wins,best_score,best_time_seconds,max_level,enemies_defeated,revives,levels_completed,total_score,achievement_count')
       .order('best_score', { ascending: false })
       .order('wins', { ascending: false })
       .order('best_time_seconds', { ascending: true, nullsFirst: false })
