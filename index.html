@@ -937,6 +937,8 @@
             handleMessage(msg) {
                 if (!msg || typeof msg.type !== 'string') return;
                 if (msg.type === 'hello' && this.role === 'host' && Game.isReady) { this.frame = 1; this.sendState(0); }
+                else if (msg.type === 'hostError' && this.role === 'guest')
+                    this.status('El anfitrión no pudo iniciar los gráficos 3D. Prueben un navegador con WebGL activo.');
                 else if (msg.type === 'start' && this.role === 'guest' && !Game.isReady)
                     document.getElementById('btn-start').click();
                 else if (msg.type === 'state' && this.role === 'guest' && msg.state) {
@@ -2690,7 +2692,16 @@
         let animationStarted = false;
 
         function initGameSession() {
-            init3D();
+            try {
+                init3D();
+            } catch (error) {
+                console.error('No se pudo iniciar WebGL:', error);
+                const menu = document.getElementById('menu-screen');
+                menu.style.display = 'flex'; menu.style.opacity = 1;
+                Net.status('No se pudo iniciar el juego 3D. Activa WebGL o prueba otro navegador/computador.');
+                if (Net.role === 'host') Net.send({ type: 'hostError' });
+                return;
+            }
             createPlayer();
             startNewLevel();
             Game.isReady = true;
