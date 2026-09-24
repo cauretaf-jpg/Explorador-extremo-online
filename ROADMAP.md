@@ -1,13 +1,13 @@
 # Roadmap de desarrollo · Explorador Extremo Online
 
-Estado actualizado para V12.3.
+Estado actualizado para V12.4.
 
 | Prioridad | Mejora | Estado | Siguiente objetivo |
 |---|---|---|---|
-| 1 | Estabilizar modo online | Avanzado | Reconexión real y recuperación de partida |
+| 1 | Estabilizar modo online | Implementado / validación | Pruebas de estrés con dos dispositivos y cortes reales |
 | 2 | Lobby cooperativo | Implementado | Pulido de UX |
 | 3 | Cooperación real | Implementado | Más puzzles y objetivos asimétricos |
-| 4 | Separar el código | En progreso | Extraer red, UI, niveles y audio |
+| 4 | Separar el código | En progreso | Ya se extrajeron combate, sesión online y niveles; siguen UI, audio y motor de juego |
 | 5 | Mejorar combate | En progreso | Armas, munición y más power-ups |
 | 6 | Mejor progresión | Parcial | Reglas y objetivos exclusivos por nivel |
 | 7 | Ranking y perfiles | Pendiente | Supabase Auth/estadísticas persistentes |
@@ -40,12 +40,16 @@ Estado actualizado para V12.3.
 
 ## Próximas versiones propuestas
 
-### V12.4 · Estabilidad + modularización
-- Reconexión con recuperación de sala.
-- Extraer `multiplayer/`, `ui/` y `game/` del HTML.
-- Manejo de desconexión durante una partida.
+### V12.4
+- Reconexión automática con backoff.
+- Pausa segura cuando falta un jugador.
+- Recuperación de sala tras recarga.
+- Instantánea local para recuperar la partida del anfitrión.
+- Separación de `multiplayer/session.js` y `levels/config.js`.
+- Limpieza explícita al salir de una sala.
 
-### V12.5 · Progresión
+### V12.5 · Progresión + modularización
+- Extraer UI, audio y lógica principal del juego.
 - Objetivos exclusivos por bioma.
 - Mejoras entre niveles.
 - Armas y munición diferenciadas.
