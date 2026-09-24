@@ -1180,6 +1180,8 @@
                 this.intentionalClose = true;
                 this.reconnectController?.destroy?.();
                 this.reconnectController = null;
+                clearTimeout(this.connectTimer);
+                clearTimeout(this.guestProbeTimer);
                 const oldChannel = this.channel;
                 this.channel = null;
                 try {
@@ -1191,6 +1193,7 @@
                 this.role = 'solo';
                 this.code = null;
                 this.state = null;
+                if (this.remote) this.remote.removeFromParent?.();
                 this.remote = null;
                 this.peerConnected = false;
                 this.tracked = false;
@@ -1205,6 +1208,10 @@
                 document.getElementById('room-status').textContent = 'Saliste de la sala. Puedes crear otra o unirte con un código.';
                 document.getElementById('online-status').style.display = 'none';
                 document.getElementById('btn-resume-session').style.display = 'none';
+                document.getElementById('room-code').value = '';
+                const url = new URL(location.href);
+                url.searchParams.delete('sala');
+                history.replaceState(null, '', url);
             },
             uniqueParticipants() {
                 if (!this.channel) return [];
@@ -1415,6 +1422,7 @@
                         return;
                     }
                     await this.trackSelf();
+                    this.peerConnected = true;
                     this.send({ type: 'hello', name: this.name });
                     this.persistSession();
                     this.status(Game.isReady
@@ -2081,7 +2089,9 @@
                 if (bossCell) spawnMiniBoss(bossCell.x * Game.cellSize, bossCell.z * Game.cellSize);
             }
 
-            if(Game.enemies.length === 0 && Net.role !== 'guest') spawnEnemy((Game.gridSize-2)*Game.cellSize, (Game.gridSize-2)*Game.cellSize);
+            if(Game.enemies.length === 0 && Net.role !== 'guest' && !restoredLayout) {
+                spawnEnemy((Game.gridSize-2)*Game.cellSize, (Game.gridSize-2)*Game.cellSize);
+            }
 
             // --- NUEVO: Torres-Portal de inicio y meta en todos los niveles (1 al 11) ---
             createPortalTower(1 * Game.cellSize, 1 * Game.cellSize, true, Game.level);
@@ -3453,6 +3463,7 @@
 
         setInterval(() => {
             if (!Game.isReady || Game.gameOver) return;
+            if (Net.role !== 'solo' && !Net.peerConnected) return;
 
             Game.time++;
             Game.survivalTimer++;
