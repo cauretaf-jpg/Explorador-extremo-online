@@ -14,7 +14,10 @@
     <script src="./audio-engine.js"></script>
     <script src="./mobile-controls.js"></script>
     <script src="./ui-hud.js"></script>
+    <script src="./profile-client.js"></script>
+    <script src="./profile-panel.js"></script>
     <link rel="stylesheet" href="./mobile.css">
+    <link rel="stylesheet" href="./profile.css">
     <style>
         * {
             box-sizing: border-box;
@@ -623,7 +626,7 @@
     <div id="menu-screen" class="overlay">
         <h1>Explorador Extremo 3D</h1>
         <div class="author-tag">Autor del Juego: Profesor Juan Neira</div>
-        <div class="subtitle">V12.6 · Modo móvil y UI modular</div>
+        <div class="subtitle">V13 · Perfiles, estadísticas y ranking</div>
         <button class="btn" id="btn-start">Jugar solo</button>
 
         <div id="online-entry">
@@ -1023,6 +1026,8 @@
         const AudioEngine = window.ExploradorAudioEngine;
 
         const NetworkSession = window.ExploradorNetworkSession;
+        const ProfileClient = window.ExploradorProfile?.createProfileClient?.() || null;
+        let ProfilePanel = null;
 
         // El anfitrión ejecuta la física; el invitado recibe instantáneas del mundo.
         const Net = {
@@ -1072,6 +1077,7 @@
                 this.name = String(session.name || '').slice(0, 18);
                 if (this.name.length < 2) return this.status('No se pudo recuperar el nombre de la sesión.');
                 document.getElementById('player-name').value = this.name;
+                ProfileClient?.rename?.(this.name).catch(error => console.warn('No se pudo sincronizar el perfil recuperado:', error));
                 document.getElementById('room-code').value = session.code;
                 this.ready = !!session.ready;
                 this.presenceKey = session.presenceKey || null;
@@ -1148,6 +1154,7 @@
                 }
                 this.name = rawName.slice(0, 18);
                 localStorage.setItem('explorador-player-name', this.name);
+                ProfileClient?.rename?.(this.name).catch(error => console.warn('No se pudo sincronizar el nombre del perfil:', error));
                 NetworkSession?.clearSession?.();
                 this.status('Conectando a la sala…');
                 this.connectRoom(action, code).catch(error => {
@@ -1454,6 +1461,7 @@
                     progression: Game.progression,
                     progressionPaused: Game.progressionPaused,
                     pendingUpgradeLevel: Game.pendingUpgradeLevel,
+                    matchStats: Game.matchStats,
                     bossDefeated: Game.bossDefeated,
                     boss: Game.boss ? {
                         hp: Game.boss.hp, maxHp: Game.boss.maxHp,
@@ -1521,6 +1529,7 @@
                 }
                 Game.progressionPaused = !!state.progressionPaused;
                 Game.pendingUpgradeLevel = state.pendingUpgradeLevel || null;
+                if (state.matchStats) Game.matchStats = state.matchStats;
                 updateUpgradeScreen();
                 Game.bossDefeated = !!state.bossDefeated;
                 if (state.boss && Game.boss) {
@@ -1580,10 +1589,9 @@
                     const mesh = new THREE.Mesh(this.shotGeometry, this.enemyShotMaterial);
                     mesh.position.set(shot.x, shot.y, shot.z); this.shotGroup.add(mesh);
                 }
-                if (state.gameOver && !Game.gameOver) endGame();
-                if (state.gameOver && state.level > 11) {
-                    document.getElementById('victory-time').textContent = formatTime(state.time);
-                    document.getElementById('victory-score').textContent = state.score;
+                if (state.gameOver && !Game.gameOver) {
+                    if (state.level > 11) triggerVictory(state);
+                    else endGame();
                 }
             }
         };
@@ -1600,6 +1608,27 @@
 
         const rememberedName = localStorage.getItem('explorador-player-name');
         if (rememberedName) document.getElementById('player-name').value = rememberedName;
+
+        if (ProfileClient && window.ExploradorProfileUI) {
+            ProfilePanel = window.ExploradorProfileUI.createProfilePanel({
+                profileClient: ProfileClient,
+                onNameChanged(name) {
+                    document.getElementById('player-name').value = name;
+                    if (Net.role !== 'solo') {
+                        Net.name = name;
+                        Net.refreshPresence().catch(console.error);
+                        Net.persistSession({ name });
+                    }
+                }
+            });
+            ProfileClient.ensureProfile(rememberedName || '').then(profile => {
+                if (!rememberedName && profile?.display_name) {
+                    document.getElementById('player-name').value = profile.display_name;
+                    localStorage.setItem('explorador-player-name', profile.display_name);
+                }
+            }).catch(error => console.warn('Perfil persistente no disponible:', error));
+        }
+
         const invitedRoom = new URLSearchParams(location.search).get('sala');
         if (/^\d{6}$/.test(invitedRoom || '')) {
             document.getElementById('room-code').value = invitedRoom;
@@ -1639,6 +1668,20 @@
             combatRules: { maxHealth:100, reviveHealth:50, medkitHeal:35, medkitsPerLevel:2, bulletDamage:1,
                 boss:{ level:3, name:'Guardián del Desierto', hp:28, damage:44, attackCooldown:1.15, speedMultiplier:.68, score:3500 } }
         };
+
+        function createMatchStats() {
+            return {
+                matchId: crypto.randomUUID(),
+                recorded: false,
+                maxLevel: 1,
+                levelsCompleted: 0,
+                players: {
+                    solo: { enemiesDefeated: 0, revives: 0 },
+                    host: { enemiesDefeated: 0, revives: 0 },
+                    guest: { enemiesDefeated: 0, revives: 0 }
+                }
+            };
+        }
         
         const Game = {
             score: 0,
@@ -1677,6 +1720,7 @@
             progression: Progression.createProgressionState(Combat.combatRules.maxHealth),
             progressionPaused: false,
             pendingUpgradeLevel: null,
+            matchStats: createMatchStats(),
             coopPlates: [],
             platesUnlocked: false,
             plateCharge: 0,
@@ -1699,6 +1743,12 @@
                 prevMouseY: 0
             }
         };
+
+        let LocalMatchRecord = { id: crypto.randomUUID(), submitted: false };
+
+        function resetLocalMatchRecord() {
+            LocalMatchRecord = { id: crypto.randomUUID(), submitted: false };
+        }
 
         const {
             BiomeConfigs,
@@ -2983,6 +3033,7 @@
                 dir,
                 speed: p.weapon.projectileSpeed,
                 damage: p.weapon.damage,
+                ownerRole: role,
                 origin: shooter.position.clone()
             });
             if (p.ammo[role] <= 0) reloadWeapon(role);
@@ -2998,6 +3049,7 @@
 
             Game.maze = Net.role === 'guest' && Net.state ? Net.state.maze : generateMaze(Game.gridSize);
             Game.currentBiome = getBiomeForLevel(Game.level);
+            Game.matchStats.maxLevel = Math.max(Game.matchStats.maxLevel || 1, Math.min(11, Game.level));
             Game.portalCharge = 0;
             Game.portalStatus = { hostAtGoal: false, guestAtGoal: false };
             Game.plateCharge = 0;
@@ -3053,7 +3105,37 @@
             }, Game.cinematic.duration * 1000 - 500);
         }
 
-        function triggerVictory() {
+        function recordPersistentMatch(won) {
+            if (!ProfileClient || LocalMatchRecord.submitted) return;
+            LocalMatchRecord.submitted = true;
+
+            const role = localCombatRole();
+            const playerStats = Game.matchStats?.players?.[role] || { enemiesDefeated: 0, revives: 0 };
+            const match = {
+                match_id: LocalMatchRecord.id,
+                won: !!won,
+                score: Math.max(0, Math.floor(Game.score || 0)),
+                time_seconds: Math.max(1, Math.floor(Game.time || 1)),
+                max_level: Math.max(1, Math.min(11, Math.floor(Game.matchStats?.maxLevel || Math.min(Game.level, 11) || 1))),
+                enemies_defeated: Math.max(0, Math.floor(playerStats.enemiesDefeated || 0)),
+                revives: Math.max(0, Math.floor(playerStats.revives || 0)),
+                levels_completed: Math.max(0, Math.min(11, Math.floor(Game.matchStats?.levelsCompleted || 0)))
+            };
+
+            ProfileClient.recordMatch(match).then(() => {
+                ProfilePanel?.refresh?.().catch?.(() => {});
+            }).catch(error => {
+                console.warn('La partida quedó en cola para sincronizar estadísticas:', error);
+            });
+        }
+
+        function triggerVictory(authoritativeState = null) {
+            if (authoritativeState) {
+                Game.level = authoritativeState.level;
+                Game.time = authoritativeState.time;
+                Game.score = authoritativeState.score;
+                if (authoritativeState.matchStats) Game.matchStats = authoritativeState.matchStats;
+            }
             Game.gameOver = true;
             Game.isReady = false;
             AudioEngine.stopAmbient();
@@ -3062,8 +3144,9 @@
             document.getElementById('victory-score').innerText = Game.score;
             document.getElementById('upgrade-screen').style.display = 'none';
             document.getElementById('victory-screen').style.display = 'flex';
-            if (Net.role === 'host') { Net.frame = 1; Net.sendState(0); }
+            if (!authoritativeState && Net.role === 'host') { Net.frame = 1; Net.sendState(0); }
             if (Net.role !== 'solo') Net.persistSession({ inGame:false });
+            recordPersistentMatch(true);
         }
 
         function localCombatRole() {
@@ -3153,6 +3236,8 @@
                 target.rotation.z = 0;
                 target.position.y = 0;
             }
+            const rescuerRole = role === 'host' ? 'guest' : 'host';
+            if (Game.matchStats.players[rescuerRole]) Game.matchStats.players[rescuerRole].revives++;
             addScore(500);
             updateHUD();
             Net.status((role === 'host' ? (Net.hostInfo?.name || 'Anfitrión') : (Net.guestInfo?.name || 'Invitado')) + ' fue reanimado.');
@@ -3458,6 +3543,8 @@
 
             Game.progressionPaused = false;
             Game.pendingUpgradeLevel = null;
+            Game.matchStats = createMatchStats();
+            resetLocalMatchRecord();
             document.getElementById('upgrade-screen').style.display = 'none';
             setMobileGameActive(true);
             Net.status(Net.role === 'solo'
@@ -3476,6 +3563,7 @@
             const completedLevel = Game.level;
             const profile = Progression.getLevelProfile(completedLevel);
             addScore(profile.reward || 0);
+            Game.matchStats.levelsCompleted = Math.min(11, (Game.matchStats.levelsCompleted || 0) + 1);
             Game.portalCharge = 0;
             Game.level++;
 
@@ -3546,6 +3634,7 @@
             document.getElementById('game-over-screen').style.display = 'flex';
             if (Net.role === 'host') { Net.frame = 1; Net.sendState(0); }
             if (Net.role !== 'solo') Net.persistSession({ inGame:false });
+            recordPersistentMatch(false);
         }
 
         setInterval(() => {
@@ -3868,6 +3957,10 @@
                             scene.remove(enemy.mesh);
                             mazeGroup.remove(enemy.mesh);
                             Game.enemies.splice(j, 1);
+                            const killerRole = arrow.ownerRole || (Net.role === 'solo' ? 'solo' : 'host');
+                            if (Game.matchStats.players[killerRole]) {
+                                Game.matchStats.players[killerRole].enemiesDefeated++;
+                            }
 
                             if (enemy.isBoss) {
                                 Game.bossDefeated = true;
@@ -4105,6 +4198,9 @@
             if (Net.role === 'solo') NetworkSession?.clearSession?.();
             if (Net.role === 'guest' && !Net.state) return;
             Net.starting = true;
+            ProfileClient?.ensureProfile?.(document.getElementById('player-name').value || '').catch(error => {
+                console.warn('Perfil persistente no disponible al iniciar:', error);
+            });
             if (Net.role === 'host') Net.send({ type: 'start' });
             AudioEngine.init();
             document.getElementById('menu-screen').style.opacity = 0;
@@ -4153,6 +4249,7 @@
             }
             Game.progressionPaused = !!snapshot.progressionPaused;
             Game.pendingUpgradeLevel = snapshot.pendingUpgradeLevel || null;
+            Game.matchStats = snapshot.matchStats || Game.matchStats || createMatchStats();
             Game.bossDefeated = !!snapshot.bossDefeated;
             Game.restoreLayout = snapshot.layout;
 

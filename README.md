@@ -1,6 +1,40 @@
-# Explorador Extremo V12.6 · modo móvil y UI modular
+# Explorador Extremo V13 · perfiles y ranking
 
-Copia independiente del juego del profesor Juan Neira (crédito conservado en pantalla). La V12 mantiene el modo individual y refuerza el cooperativo de dos jugadores usando Supabase Realtime.
+Copia independiente del juego del profesor Juan Neira (crédito conservado en pantalla). V13 mantiene el modo individual y cooperativo y agrega persistencia de perfiles, estadísticas y ranking con Supabase.
+
+## Novedades V13
+
+- **Perfil persistente por navegador**, sin registro obligatorio de correo o contraseña.
+- Nombre de explorador editable y sincronizado con el nombre usado en el lobby.
+- Pantalla **Perfil y Ranking** desde el menú principal.
+- Ranking global **Top 20** ordenado por mejor puntaje, victorias y mejor tiempo.
+- Estadísticas persistentes:
+  - partidas jugadas,
+  - victorias,
+  - mejor puntaje,
+  - mejor tiempo de victoria,
+  - nivel máximo,
+  - enemigos derrotados,
+  - reanimaciones,
+  - niveles completados,
+  - puntaje acumulado.
+- Las bajas se atribuyen al jugador que realizó el disparo y las reanimaciones al explorador que efectuó el rescate.
+- Registro automático de resultados al ganar o perder una expedición.
+- Registro de partidas **idempotente** mediante `match_id`: un reintento de red no duplica estadísticas.
+- Si una grabación falla por conectividad, queda en una cola local y se reintenta al recuperar el perfil.
+- Nueva Edge Function de Supabase: `player-profile`.
+- Tablas:
+  - `player_profiles`: información pública del ranking,
+  - `player_credentials`: credencial técnica accesible solo por `service_role`,
+  - `player_matches`: historial técnico de partidas, no expuesto al navegador.
+- RLS activo y permisos de mínimo privilegio: el navegador solo puede hacer `SELECT` sobre `player_profiles`.
+- Auditor de seguridad de Supabase sin advertencias después de las migraciones.
+- Nuevos módulos:
+  - `src/profile/client.js`,
+  - `src/ui/profile-panel.js`,
+  - `src/ui/profile.css`.
+
+El ranking V13 está pensado como ranking casual. El host sigue siendo autoritativo para la partida, pero la simulación corre en el navegador; todavía no existe validación antitrampas del lado servidor.
 
 ## Novedades V12.6
 
@@ -107,9 +141,9 @@ La recuperación V12.4 es local al navegador. Todavía no persiste partidas en u
 
 El anfitrión es autoritativo: ejecuta la física, enemigos, trampas, puntaje y progresión. El invitado envía su pose y acciones, mientras recibe instantáneas del mundo.
 
-Las salas usan **Realtime Broadcast + Presence** y siguen siendo efímeras en Supabase. V12.4 agrega recuperación local de sesión/partida mediante `localStorage`, sin tablas SQL. El código de sala no constituye autenticación.
+Las salas usan **Realtime Broadcast + Presence** y siguen siendo efímeras. V12.4 agrega recuperación local de sesión/partida mediante `localStorage`. V13 usa Postgres para perfiles y estadísticas y una Edge Function para todas las escrituras sensibles. El código de sala no constituye autenticación.
 
-El proyecto configurado en `supabase.public.json` usa exclusivamente URL y clave **publicable**. Nunca debe utilizarse una secret key o `service_role` en el navegador.
+El proyecto configurado en `supabase.public.json` usa exclusivamente URL y clave **publicable**. La `service_role` solo existe dentro de la Edge Function administrada por Supabase y nunca se envía al navegador.
 
 ## Publicar en Vercel
 
@@ -132,4 +166,4 @@ La versión del curso tenía un cierre de testing el 3 de octubre de 2026. Esta 
 
 ## Validación
 
-La sintaxis del script principal y de los módulos se comprueba antes de publicar y Vercel debe completar el build. La validación funcional final debe cubrir escritorio y móvil, además de dos clientes online: joystick, cámara táctil, disparo, recarga, interacción/reanimación, rotación de pantalla, reconexión, combate y progresión.
+La sintaxis del script principal y de los módulos se comprueba antes de publicar y Vercel debe completar el build. Para V13 también se valida RLS/permisos, la función atómica de estadísticas y la idempotencia de `match_id`. La validación funcional final debe cubrir creación/renombre de perfil, ranking, victoria/derrota, escritorio, móvil y dos clientes online.
