@@ -92,7 +92,7 @@ function createProfileClient() {
     if (!id) return null;
     const { data, error } = await supabase
       .from('player_profiles')
-      .select('id,display_name,games_played,wins,best_score,best_time_seconds,max_level,enemies_defeated,revives,levels_completed,total_score,created_at,updated_at')
+      .select('id,display_name,games_played,wins,best_score,best_time_seconds,max_level,enemies_defeated,revives,levels_completed,total_score,achievement_count,achievement_count,created_at,updated_at')
       .eq('id', id)
       .maybeSingle();
     if (error) throw error;
