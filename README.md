@@ -1,6 +1,42 @@
-# Explorador Extremo V13 · perfiles y ranking
+# Explorador Extremo V13.1 · logros e insignias
 
 Copia independiente del juego del profesor Juan Neira (crédito conservado en pantalla). V13 mantiene el modo individual y cooperativo y agrega persistencia de perfiles, estadísticas y ranking con Supabase.
+
+## Novedades V13.1
+
+- **20 logros persistentes** repartidos en cuatro categorías:
+  - Exploración,
+  - Combate,
+  - Cooperación,
+  - Maestría.
+- Nueva sección **Logros e insignias** dentro de Perfil y Ranking.
+- Cada logro muestra icono, descripción, estado bloqueado/desbloqueado y puntos.
+- El perfil muestra total de logros y puntuación acumulada de insignias.
+- El ranking global ahora muestra también la cantidad de logros de cada jugador.
+- Notificación animada **LOGRO DESBLOQUEADO** al registrar nuevos logros.
+- Logros por hitos como:
+  - completar el primer nivel,
+  - alcanzar Egipto, Maya, Azteca, China y Grecia,
+  - derrotar 1 / 10 / 50 / 100 enemigos,
+  - derrotar al Guardián del Desierto,
+  - realizar 1 / 5 / 20 reanimaciones,
+  - ganar en cooperativo,
+  - completar la expedición,
+  - ganar en 15 minutos o menos,
+  - superar 25.000 puntos,
+  - conseguir 5 victorias.
+- Los desbloqueos se calculan en Supabase después de registrar una partida.
+- Sistema idempotente: reenviar la misma partida no vuelve a desbloquear ni duplicar logros.
+- Retrocompatibilidad: perfiles creados en V13 reciben automáticamente los logros acumulativos que ya cumplen.
+- Nuevas tablas:
+  - `achievement_definitions`,
+  - `player_achievements`.
+- `player_profiles` incorpora `achievement_count`.
+- Edge Function `player-profile` actualizada a V3.
+- RLS mantiene las escrituras restringidas a `service_role`; las definiciones y desbloqueos son legibles para mostrar insignias públicas.
+- Migración V13.1 versionada en `supabase/migrations/20260924_v13_1_achievements.sql`.
+
+Los desafíos diarios/semanales quedan para una versión posterior; V13.1 se concentra en logros permanentes y verificables a partir de las estadísticas de partida.
 
 ## Novedades V13
 
