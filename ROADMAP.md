@@ -1,12 +1,12 @@
 # Roadmap de desarrollo · Explorador Extremo Online
 
-Estado actualizado para V13.1.
+Estado actualizado para V13.2.
 
 | Prioridad | Mejora | Estado | Siguiente objetivo |
 |---|---|---|---|
 | 1 | Estabilizar modo online | Implementado / validación | Pruebas de estrés con dos dispositivos y cortes reales |
 | 2 | Lobby cooperativo | Implementado | Pulido de UX |
-| 3 | Cooperación real | Implementado | Más puzzles y objetivos asimétricos |
+| 3 | Cooperación real | Implementado | Más puzzles y objetivos asimétricos; Batalla multijugador funciona como modo separado |
 | 4 | Separar el código | Muy avanzado | Combate, red, niveles, progresión, audio y parte relevante de UI ya están modularizados; queda extraer el motor principal/escena |
 | 5 | Mejorar combate | Avanzado | Sistema de arma, cargador, recarga y mejoras implementado; faltan más armas/power-ups físicos |
 | 6 | Mejor progresión | Implementado / expansión | Objetivos 1–11 y mejoras entre niveles; se puede profundizar con más eventos exclusivos |
@@ -79,13 +79,26 @@ Estado actualizado para V13.1.
 - Retrocompatibilidad con perfiles V13.
 - Evaluación e inserción idempotente desde Supabase.
 
+### V13.2
+- Modo Batalla todos contra todos.
+- Salas dinámicas para 2–8 jugadores.
+- Lobby con lista completa de participantes.
+- Ready-check para todos.
+- Arena 3D propia.
+- 100 HP, respawn y 10 bajas como objetivo.
+- Partidas de 5 minutos.
+- Clasificación en vivo.
+- Host autoritativo para daño y resultado.
+- Soporte táctil básico.
+
 ## Próximas versiones propuestas
 
-### V13.2 · Desafíos rotativos
+### V13.3 · Batalla persistente + desafíos
+- Registrar victorias, bajas y muertes de Batalla en el perfil.
+- Ranking específico de Batalla.
+- Reconexión durante una batalla.
 - Desafíos diarios y semanales.
 - Retos por bioma, combate y cooperación.
-- Recompensas de perfil y cosméticos.
-- Historial de desafíos completados.
 
 ### V14 · Cuenta opcional
 - Supabase Auth para migrar el perfil local a una cuenta.
