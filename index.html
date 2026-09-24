@@ -867,7 +867,14 @@
                 const online = document.getElementById('online-status');
                 online.textContent = message; online.style.display = this.role === 'solo' ? 'none' : 'block';
             },
-            async connect(action, code) {
+            connect(action, code) {
+                this.status('Conectando a la sala…');
+                this.connectRoom(action, code).catch(error => {
+                    console.error('Error al crear o unirse a la sala:', error);
+                    this.status('No se pudo conectar. Abre el enlace en Chrome o Edge y vuelve a intentarlo.');
+                });
+            },
+            async connectRoom(action, code) {
                 const cfg = window.EXPLORADOR_CONFIG;
                 if (!cfg?.url || !cfg?.publishableKey) return this.status('La conexión online aún no está configurada.');
                 if (this.channel) await this.client.removeChannel(this.channel);
@@ -876,23 +883,34 @@
                 this.code = action === 'create' ? String(crypto.getRandomValues(new Uint32Array(1))[0] % 900000 + 100000) : String(code);
                 if (!/^\d{6}$/.test(this.code)) { this.role = 'solo'; return this.status('Escribe un código de seis dígitos.'); }
                 this.peerConnected = false; this.tracked = false; this.subscribed = false;
+                const presenceKey = Array.from(crypto.getRandomValues(new Uint8Array(16)), byte => byte.toString(16).padStart(2, '0')).join('');
                 this.channel = this.client.channel('explorador:' + this.code, {
-                    config: { broadcast: { self: false }, presence: { key: crypto.randomUUID() } }
+                    config: { broadcast: { self: false }, presence: { key: presenceKey } }
                 });
                 this.channel
                     .on('broadcast', { event: 'game' }, ({ payload }) => this.handleMessage(payload))
-                    .on('presence', { event: 'sync' }, () => this.syncPresence())
+                    .on('presence', { event: 'sync' }, () => this.syncPresence().catch(error => { console.error(error); this.status('No se pudo sincronizar la sala.'); }))
                     .subscribe(async status => {
+                        clearTimeout(this.connectTimer);
                         if (status === 'SUBSCRIBED') {
                             this.subscribed = true;
                             if (this.role === 'host') {
-                                this.tracked = true; await this.channel.track({ role: 'host' });
-                                this.status('Sala ' + this.code + ' · comparte este código y espera al otro jugador.');
+                                try {
+                                    this.tracked = true;
+                                    await this.channel.track({ role: 'host' });
+                                    this.status('Sala ' + this.code + ' · comparte este código y espera al otro jugador.');
+                                } catch (error) {
+                                    console.error('Error de presencia:', error);
+                                    this.status('No se pudo crear la sala. Vuelve a intentarlo en Chrome o Edge.');
+                                }
                             }
                         } else if (status === 'CHANNEL_ERROR' || status === 'TIMED_OUT') {
-                            this.status('No se pudo conectar a Supabase.');
+                            this.status('No se pudo conectar al servidor de salas. Abre el enlace en Chrome o Edge.');
                         }
                     });
+                this.connectTimer = setTimeout(() => {
+                    if (!this.subscribed) this.status('La conexión tardó demasiado. Abre el enlace en Chrome o Edge e inténtalo otra vez.');
+                }, 12000);
             },
             async syncPresence() {
                 if (!this.channel || !this.subscribed || this.role === 'solo') return;
