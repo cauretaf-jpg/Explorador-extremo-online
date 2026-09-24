@@ -1,6 +1,19 @@
-# Explorador Extremo V12.2 · cooperativo online
+# Explorador Extremo V12.3 · combate cooperativo
 
 Copia independiente del juego del profesor Juan Neira (crédito conservado en pantalla). La V12 mantiene el modo individual y refuerza el cooperativo de dos jugadores usando Supabase Realtime.
+
+## Novedades V12.3
+
+- **Salud individual:** 100 HP por explorador.
+- El daño reduce HP; al llegar a 0 comienza el sistema de caída/reanimación.
+- **Botiquines** que restauran 35 HP al jugador que los recoge.
+- HUD con salud propia y del compañero.
+- Enemigos con roles de combate: veloces, tanques, emboscadores y atacantes a distancia.
+- Enemigos ahora tienen HP y pueden requerir varios disparos.
+- **Mini-jefe del nivel 3: Guardián del Desierto**, con barra de vida y segunda fase.
+- En cooperativo, el Guardián queda protegido hasta activar las placas y vuelve a quedar protegido si un compañero cae.
+- El portal del nivel 3 no se abre hasta derrotar al Guardián.
+- Se inició la separación del código con `src/combat-config.js`, primer paso de la refactorización modular.
 
 ## Novedades V12.2
 
