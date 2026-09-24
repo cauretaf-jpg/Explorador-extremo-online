@@ -38,15 +38,15 @@ Estado actualizado para V12.4.
 - Barra de salud del jefe y segunda fase.
 - Inicio de modularización con `src/combat-config.js`.
 
-## Próximas versiones propuestas
-
 ### V12.4
 - Reconexión automática con backoff.
 - Pausa segura cuando falta un jugador.
 - Recuperación de sala tras recarga.
 - Instantánea local para recuperar la partida del anfitrión.
-- Separación de `multiplayer/session.js` y `levels/config.js`.
+- Separación de `src/multiplayer/session.js` y `src/levels/config.js`.
 - Limpieza explícita al salir de una sala.
+
+## Próximas versiones propuestas
 
 ### V12.5 · Progresión + modularización
 - Extraer UI, audio y lógica principal del juego.
