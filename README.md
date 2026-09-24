@@ -1,6 +1,30 @@
-# Explorador Extremo V12.4 · estabilidad online
+# Explorador Extremo V12.5 · progresión de expedición
 
 Copia independiente del juego del profesor Juan Neira (crédito conservado en pantalla). La V12 mantiene el modo individual y refuerza el cooperativo de dos jugadores usando Supabase Realtime.
+
+## Novedades V12.5
+
+- **Objetivos temáticos para los 11 niveles**, visibles durante la expedición.
+- Escalado progresivo de velocidad, vida y daño de enemigos según nivel.
+- Pantalla de **mejora de expedición** entre niveles 1–10.
+- En cooperativo, el anfitrión elige una mejora que se aplica al equipo completo.
+- Mejoras disponibles:
+  - munición reforzada,
+  - cargador ampliado,
+  - mecanismo rápido,
+  - cañón de precisión,
+  - equipo médico,
+  - kit de rescate.
+- Sistema de **cargador y munición**.
+- Recarga manual con **R** y recarga automática al vaciar el cargador.
+- Armas que evolucionan en clase según las mejoras: rifle pesado, carabina táctica, carabina rápida y rifle de precisión.
+- HUD de arma con munición y estado de recarga.
+- Recompensa adicional al completar cada nivel.
+- El estado de progresión, arma, munición y mejora pendiente se sincroniza entre host e invitado y se incluye en las instantáneas de recuperación.
+- Modularización ampliada:
+  - `src/progression/config.js`
+  - `src/audio/engine.js`
+  - además de los módulos de combate, sesión y niveles ya existentes.
 
 ## Novedades V12.4
 

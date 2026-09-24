@@ -10,6 +10,8 @@
     <script src="./combat-config.js"></script>
     <script src="./network-session.js"></script>
     <script src="./levels-config.js"></script>
+    <script src="./progression-config.js"></script>
+    <script src="./audio-engine.js"></script>
     <style>
         * {
             box-sizing: border-box;
@@ -456,12 +458,82 @@
             position:absolute; inset:0; z-index:65; pointer-events:none;
             background:rgba(255,0,0,.22); opacity:0; transition:opacity .16s ease;
         }
+        #level-objective {
+            position:absolute;
+            left:16px;
+            top:112px;
+            z-index:69;
+            width:min(360px,42vw);
+            padding:10px 13px;
+            border-radius:12px;
+            border:1px solid rgba(255,215,0,.42);
+            background:rgba(8,13,10,.82);
+            color:#fff;
+            pointer-events:none;
+        }
+        #level-objective-title { color:#ffd700; font-weight:900; font-size:.9rem; }
+        #level-objective-text { margin-top:3px; font-size:.78rem; line-height:1.3; color:#ddd; }
+        #weapon-hud {
+            position:absolute;
+            right:16px;
+            bottom:132px;
+            z-index:72;
+            min-width:205px;
+            padding:9px 12px;
+            border-radius:11px;
+            border:1px solid rgba(255,215,0,.4);
+            background:rgba(7,10,8,.88);
+            color:#fff;
+            text-align:right;
+            pointer-events:none;
+            font-weight:800;
+        }
+        #weapon-ammo { color:#ffd700; font-size:1.05rem; }
+        #upgrade-screen {
+            display:none;
+            z-index:125;
+            background:radial-gradient(circle, rgba(18,30,24,.97), rgba(3,7,5,.995));
+        }
+        #upgrade-screen h2 {
+            color:#ffd700;
+            font-size:2rem;
+            margin-bottom:8px;
+            text-align:center;
+        }
+        #upgrade-options {
+            display:grid;
+            grid-template-columns:repeat(3,minmax(0,1fr));
+            gap:14px;
+            width:min(920px,92vw);
+            margin-top:22px;
+        }
+        .upgrade-card {
+            border:1px solid rgba(0,255,204,.45);
+            background:rgba(0,0,0,.38);
+            color:#fff;
+            border-radius:16px;
+            padding:20px 16px;
+            min-height:160px;
+            cursor:pointer;
+            transition:.2s ease;
+            text-align:left;
+        }
+        .upgrade-card:hover {
+            transform:translateY(-4px);
+            border-color:#ffd700;
+            box-shadow:0 10px 24px rgba(0,0,0,.42);
+        }
+        .upgrade-card strong { display:block; color:#00ffcc; font-size:1.08rem; margin-bottom:9px; }
+        #upgrade-waiting { color:#aaa; margin-top:14px; font-weight:700; }
         @media (max-width: 700px) {
             h1 { font-size: 2.45rem; }
             .btn { padding: 12px 22px; font-size: 1rem; }
             .instructions { max-width: 92vw; font-size: 0.82rem; }
             #hud { font-size: 0.82rem; gap: 6px; }
             .hud-panel { padding: 7px 10px; }
+            #level-objective { top:96px; left:8px; width:58vw; padding:8px 9px; }
+            #weapon-hud { right:8px; bottom:118px; min-width:155px; font-size:.75rem; }
+            #upgrade-options { grid-template-columns:1fr; max-height:60vh; overflow:auto; }
         }
 
         #victory-screen {
@@ -518,6 +590,15 @@
         <div id="boss-health-track"><div id="boss-health-fill"></div></div>
     </div>
     <div id="damage-flash"></div>
+    <div id="level-objective">
+        <div id="level-objective-title">Nivel 1 · Primer contacto</div>
+        <div id="level-objective-text">Encuentra el portal y aprende a moverte entre los peligros.</div>
+    </div>
+    <div id="weapon-hud">
+        <div id="weapon-name">Rifle de expedición</div>
+        <div><span id="weapon-ammo">8/8</span> · <span id="weapon-status">LISTO</span></div>
+        <div style="font-size:.68rem;color:#aaa;margin-top:2px">R para recargar</div>
+    </div>
 
     <div id="level-cinematic-banner">
         <div id="level-cinematic-title">Nivel 1</div>
@@ -539,7 +620,7 @@
     <div id="menu-screen" class="overlay">
         <h1>Explorador Extremo 3D</h1>
         <div class="author-tag">Autor del Juego: Profesor Juan Neira</div>
-        <div class="subtitle">V12.4 · Estabilidad online</div>
+        <div class="subtitle">V12.5 · Progresión de expedición</div>
         <button class="btn" id="btn-start">Jugar solo</button>
 
         <div id="online-entry">
@@ -573,16 +654,24 @@
         <div class="instructions">
             <strong>CONTROLES DE EXPEDICIÓN:</strong><br>
             • Mover Explorador: <strong>WASD o Flechas del Teclado (adaptado a la cámara)</strong><br>
-            • Disparar Rifle de Expedición: <strong>Barra Espaciadora</strong><br>
+            • Disparar arma: <strong>Barra Espaciadora</strong> · Recargar: <strong>R</strong><br>
             • Reanimar compañero: <strong>Mantener E cerca del jugador caído</strong><br>
             • Cooperativo: <strong>activen las dos placas simultáneamente desde el nivel 2</strong><br>
             • Salud: <strong>busca botiquines para recuperar HP</strong><br>
             • Nivel 3: <strong>derroten al Guardián del Desierto para abrir el portal</strong><br>
+            • Progresión: <strong>elige una mejora de equipo entre niveles</strong><br>
             • Online: <strong>la partida se pausa y reconecta automáticamente ante cortes breves</strong><br>
             • Rotar Vista 360°: <strong>Mantener Click Izquierdo y arrastrar</strong><br>
             • Zoom de Perspectiva: <strong>Rueda del Mouse (Scroll)</strong><br><br>
             ¡Recorre los biomas evitando trampas y enemigos en caminos 3D!
         </div>
+    </div>
+
+    <div id="upgrade-screen" class="overlay">
+        <h2>MEJORA DE EXPEDICIÓN</h2>
+        <div class="subtitle" id="upgrade-subtitle">Elige una mejora para el siguiente nivel</div>
+        <div id="upgrade-options"></div>
+        <div id="upgrade-waiting"></div>
     </div>
 
     <div id="game-over-screen" class="overlay">
@@ -927,193 +1016,7 @@
         };
 
         // --- MOTOR DE AUDIO CON SÍNTESIS AMBIENTAL DINÁMICA ---
-        const AudioEngine = {
-            ctx: null,
-            ambientNodes: [],
-            init() {
-                if(!this.ctx) {
-                    this.ctx = new (window.AudioContext || window.webkitAudioContext)();
-                }
-            },
-            playCoin() {
-                if(!this.ctx) return;
-                let osc = this.ctx.createOscillator(), gain = this.ctx.createGain();
-                osc.type = 'sine'; osc.frequency.setValueAtTime(587.33, this.ctx.currentTime);
-                osc.frequency.setValueAtTime(880, this.ctx.currentTime + 0.1);
-                gain.gain.setValueAtTime(0.12, this.ctx.currentTime);
-                gain.gain.exponentialRampToValueAtTime(0.01, this.ctx.currentTime + 0.35);
-                osc.connect(gain); gain.connect(this.ctx.destination);
-                osc.start(); osc.stop(this.ctx.currentTime + 0.35);
-            },
-            playShoot() {
-                if(!this.ctx) return;
-                let osc = this.ctx.createOscillator(), gain = this.ctx.createGain();
-                osc.type = 'sawtooth'; 
-                osc.frequency.setValueAtTime(600, this.ctx.currentTime);
-                osc.frequency.exponentialRampToValueAtTime(60, this.ctx.currentTime + 0.12);
-                gain.gain.setValueAtTime(0.2, this.ctx.currentTime);
-                gain.gain.exponentialRampToValueAtTime(0.01, this.ctx.currentTime + 0.12);
-                osc.connect(gain); gain.connect(this.ctx.destination);
-                osc.start(); osc.stop(this.ctx.currentTime + 0.12);
-            },
-            playHit() {
-                if(!this.ctx) return;
-                let osc = this.ctx.createOscillator(), gain = this.ctx.createGain();
-                osc.type = 'square'; osc.frequency.setValueAtTime(140, this.ctx.currentTime);
-                osc.frequency.linearRampToValueAtTime(30, this.ctx.currentTime + 0.25);
-                gain.gain.setValueAtTime(0.25, this.ctx.currentTime);
-                gain.gain.exponentialRampToValueAtTime(0.01, this.ctx.currentTime + 0.25);
-                osc.connect(gain); gain.connect(this.ctx.destination);
-                osc.start(); osc.stop(this.ctx.currentTime + 0.25);
-            },
-            createNoiseBuffer() {
-                const bufferSize = 2 * this.ctx.sampleRate;
-                const noiseBuffer = this.ctx.createBuffer(1, bufferSize, this.ctx.sampleRate);
-                const output = noiseBuffer.getChannelData(0);
-                for (let i = 0; i < bufferSize; i++) {
-                    output[i] = Math.random() * 2 - 1;
-                }
-                return noiseBuffer;
-            },
-            stopAmbient() {
-                this.ambientNodes.forEach(node => {
-                    try { node.stop(); } catch(e) {}
-                });
-                this.ambientNodes = [];
-            },
-            playAmbient(biome) {
-                if(!this.ctx) return;
-                this.stopAmbient();
-
-                const mainGain = this.ctx.createGain();
-                mainGain.gain.setValueAtTime(0.1, this.ctx.currentTime);
-                mainGain.connect(this.ctx.destination);
-
-                if (biome === 'Selva') {
-                    let hum = this.ctx.createOscillator();
-                    hum.type = 'triangle'; hum.frequency.value = 65;
-                    let humGain = this.ctx.createGain(); humGain.gain.value = 0.04;
-                    hum.connect(humGain).connect(mainGain);
-                    hum.start(); this.ambientNodes.push(hum);
-                } else if (biome === 'Montaña') {
-                    let noiseSource = this.ctx.createBufferSource();
-                    noiseSource.buffer = this.createNoiseBuffer();
-                    noiseSource.loop = true;
-                    let windFilter = this.ctx.createBiquadFilter();
-                    windFilter.type = 'bandpass'; windFilter.Q.value = 3.5;
-                    let lfo = this.ctx.createOscillator(); lfo.frequency.value = 0.1;
-                    let lfoGain = this.ctx.createGain(); lfoGain.gain.value = 220;
-                    lfo.connect(lfoGain).connect(windFilter.frequency);
-                    noiseSource.connect(windFilter).connect(mainGain);
-                    lfo.start(); noiseSource.start();
-                    this.ambientNodes.push(lfo, noiseSource);
-                } else if (biome === 'Desierto') {
-                    let noiseSource = this.ctx.createBufferSource();
-                    noiseSource.buffer = this.createNoiseBuffer();
-                    noiseSource.loop = true;
-                    let desertFilter = this.ctx.createBiquadFilter();
-                    desertFilter.type = 'bandpass'; desertFilter.Q.value = 1.5;
-                    let lfo = this.ctx.createOscillator(); lfo.frequency.value = 0.15;
-                    let lfoGain = this.ctx.createGain(); lfoGain.gain.value = 180;
-                    lfo.connect(lfoGain).connect(desertFilter.frequency);
-                    noiseSource.connect(desertFilter).connect(mainGain);
-                    lfo.start(); noiseSource.start();
-                    this.ambientNodes.push(lfo, noiseSource);
-                } else if (biome === 'Bosque') {
-                    let drone1 = this.ctx.createOscillator(), drone2 = this.ctx.createOscillator();
-                    drone1.type = 'sawtooth'; drone1.frequency.value = 50;
-                    drone2.type = 'triangle'; drone2.frequency.value = 50.5;
-                    let lowpass = this.ctx.createBiquadFilter();
-                    lowpass.type = 'lowpass'; lowpass.frequency.value = 110;
-                    let droneGain = this.ctx.createGain(); droneGain.gain.value = 0.05;
-                    drone1.connect(lowpass); drone2.connect(lowpass);
-                    lowpass.connect(droneGain).connect(mainGain);
-                    drone1.start(); drone2.start();
-                    this.ambientNodes.push(drone1, drone2);
-                }
-                // --- AMBIENTES SONOROS NUEVOS NIVELES 7-11 ---
-                else if (biome === 'Egipto') {
-                    // Drone grave de cámara mortuoria + viento de arena tenue
-                    let drone = this.ctx.createOscillator();
-                    drone.type = 'sine'; drone.frequency.value = 72;
-                    let droneGain = this.ctx.createGain(); droneGain.gain.value = 0.06;
-                    let sand = this.ctx.createBufferSource();
-                    sand.buffer = this.createNoiseBuffer(); sand.loop = true;
-                    let sandFilter = this.ctx.createBiquadFilter();
-                    sandFilter.type = 'highpass'; sandFilter.frequency.value = 2200;
-                    let sandGain = this.ctx.createGain(); sandGain.gain.value = 0.015;
-                    drone.connect(droneGain).connect(mainGain);
-                    sand.connect(sandFilter).connect(sandGain).connect(mainGain);
-                    drone.start(); sand.start();
-                    this.ambientNodes.push(drone, sand);
-                }
-                else if (biome === 'Maya') {
-                    // Percusión ritual con flauta grave sintetizada + selva densa
-                    let flute = this.ctx.createOscillator();
-                    flute.type = 'sine'; flute.frequency.value = 220;
-                    let flGain = this.ctx.createGain(); flGain.gain.value = 0.035;
-                    let lfo = this.ctx.createOscillator(); lfo.frequency.value = 0.25;
-                    let lfoGain = this.ctx.createGain(); lfoGain.gain.value = 25;
-                    lfo.connect(lfoGain).connect(flute.frequency);
-                    let hum = this.ctx.createOscillator();
-                    hum.type = 'triangle'; hum.frequency.value = 60;
-                    let humGain = this.ctx.createGain(); humGain.gain.value = 0.04;
-                    flute.connect(flGain).connect(mainGain);
-                    hum.connect(humGain).connect(mainGain);
-                    flute.start(); lfo.start(); hum.start();
-                    this.ambientNodes.push(flute, lfo, hum);
-                }
-                else if (biome === 'Azteca') {
-                    // Tambores volcánicos graves con crepitar de fuego
-                    let lowDrum = this.ctx.createOscillator();
-                    lowDrum.type = 'square'; lowDrum.frequency.value = 45;
-                    let drumGain = this.ctx.createGain(); drumGain.gain.value = 0.045;
-                    let fire = this.ctx.createBufferSource();
-                    fire.buffer = this.createNoiseBuffer(); fire.loop = true;
-                    let fireFilter = this.ctx.createBiquadFilter();
-                    fireFilter.type = 'bandpass'; fireFilter.frequency.value = 800; fireFilter.Q.value = 0.8;
-                    let fireGain = this.ctx.createGain(); fireGain.gain.value = 0.03;
-                    lowDrum.connect(drumGain).connect(mainGain);
-                    fire.connect(fireFilter).connect(fireGain).connect(mainGain);
-                    lowDrum.start(); fire.start();
-                    this.ambientNodes.push(lowDrum, fire);
-                }
-                else if (biome === 'ChinaFeudal') {
-                    // Campanas y cuerdas orientales sintetizadas
-                    let bell = this.ctx.createOscillator();
-                    bell.type = 'sine'; bell.frequency.value = 330;
-                    let bellGain = this.ctx.createGain(); bellGain.gain.value = 0.025;
-                    let lfo = this.ctx.createOscillator(); lfo.frequency.value = 0.08;
-                    let lfoGain = this.ctx.createGain(); lfoGain.gain.value = 8;
-                    lfo.connect(lfoGain).connect(bell.frequency);
-                    let string_ = this.ctx.createOscillator();
-                    string_.type = 'triangle'; string_.frequency.value = 165;
-                    let stringGain = this.ctx.createGain(); stringGain.gain.value = 0.03;
-                    bell.connect(bellGain).connect(mainGain);
-                    string_.connect(stringGain).connect(mainGain);
-                    bell.start(); lfo.start(); string_.start();
-                    this.ambientNodes.push(bell, lfo, string_);
-                }
-                else if (biome === 'Grecia') {
-                    // Viento sobre mármol + coro de cuerdas graves de lira
-                    let wind = this.ctx.createBufferSource();
-                    wind.buffer = this.createNoiseBuffer(); wind.loop = true;
-                    let windFilter = this.ctx.createBiquadFilter();
-                    windFilter.type = 'bandpass'; windFilter.Q.value = 2.2;
-                    let lfo = this.ctx.createOscillator(); lfo.frequency.value = 0.12;
-                    let lfoGain = this.ctx.createGain(); lfoGain.gain.value = 260;
-                    lfo.connect(lfoGain).connect(windFilter.frequency);
-                    let windGain = this.ctx.createGain(); windGain.gain.value = 0.03;
-                    let lyre = this.ctx.createOscillator();
-                    lyre.type = 'sine'; lyre.frequency.value = 196;
-                    let lyreGain = this.ctx.createGain(); lyreGain.gain.value = 0.02;
-                    wind.connect(windFilter).connect(windGain).connect(mainGain);
-                    lyre.connect(lyreGain).connect(mainGain);
-                    lfo.start(); wind.start(); lyre.start();
-                    this.ambientNodes.push(lfo, wind, lyre);
-                }
-            }
-        };
+        const AudioEngine = window.ExploradorAudioEngine;
 
         const NetworkSession = window.ExploradorNetworkSession;
 
@@ -1479,6 +1382,8 @@
                     this.applyPose(msg);
                 else if (msg.type === 'shoot' && this.role === 'host' && this.remote && Game.isReady)
                     fireArrow(this.remote);
+                else if (msg.type === 'reload' && this.role === 'host' && this.remote && Game.isReady)
+                    reloadWeapon('guest');
             },
             makeRemote() {
                 if (this.role !== 'host' || !playerMesh || this.remote) return;
@@ -1491,8 +1396,8 @@
                 if (!this.remote || !Game.isReady) return;
                 this.remoteInteract = !!pose.interact;
                 if (Game.coopDowned.guest) return;
-                const elapsed = Math.min(0.25, (performance.now() - (this.lastPose || performance.now())) / 1000);
-                this.lastPose = performance.now();
+                const elapsed = Math.min(0.25, (Date.now() - (this.lastPose || Date.now())) / 1000);
+                this.lastPose = Date.now();
                 const distance = Math.hypot(pose.x - this.remote.position.x, pose.z - this.remote.position.z);
                 if (distance > 3 + elapsed * 12 || checkMazeCollision(pose.x, pose.z)) return;
                 this.remote.position.set(pose.x, 0, pose.z); this.remote.rotation.y = pose.angle;
@@ -1542,6 +1447,9 @@
                     reviveProgress: Game.reviveProgress,
                     reviveTarget: Game.reviveTarget,
                     health: Game.health,
+                    progression: Game.progression,
+                    progressionPaused: Game.progressionPaused,
+                    pendingUpgradeLevel: Game.pendingUpgradeLevel,
                     bossDefeated: Game.bossDefeated,
                     boss: Game.boss ? {
                         hp: Game.boss.hp, maxHp: Game.boss.maxHp,
@@ -1550,7 +1458,7 @@
                     gameOver: Game.gameOver
                 };
 
-                const now = performance.now();
+                const now = Date.now();
                 if (now - this.lastSnapshotAt >= 1000) {
                     this.lastSnapshotAt = now;
                     this.persistSession({
@@ -1574,8 +1482,14 @@
                     } else if (!state.gameOver && this.role === 'guest') document.getElementById('btn-start').click();
                     return;
                 }
-                if (state.level !== Game.level || !this.readyLevel) {
-                    Game.level = state.level; startNewLevel(); this.readyLevel = state.level;
+                if (state.progressionPaused) {
+                    Game.level = state.level;
+                    this.readyLevel = null;
+                    updateLevelObjective();
+                } else if (state.level !== Game.level || !this.readyLevel) {
+                    Game.level = state.level;
+                    startNewLevel();
+                    this.readyLevel = state.level;
                 }
                 if (!this.remote) {
                     this.remote = playerMesh.clone(true);
@@ -1597,6 +1511,13 @@
                 Game.reviveProgress = state.reviveProgress || 0;
                 Game.reviveTarget = state.reviveTarget || null;
                 Game.health = state.health || Game.health;
+                if (state.progression) {
+                    Game.progression = state.progression;
+                    Game.maxHealth = state.progression.maxHealth || Game.maxHealth;
+                }
+                Game.progressionPaused = !!state.progressionPaused;
+                Game.pendingUpgradeLevel = state.pendingUpgradeLevel || null;
+                updateUpgradeScreen();
                 Game.bossDefeated = !!state.bossDefeated;
                 if (state.boss && Game.boss) {
                     Game.boss.hp = state.boss.hp;
@@ -1706,6 +1627,8 @@
 
         // --- ESTADO Y CONFIGURACIÓN GLOBAL ---
         const playerHeight = 1.7; // Altura exacta de la entidad explorador extremo
+        const Progression = window.ExploradorProgression;
+
         const Combat = window.ExploradorCombatConfig || {
             getEnemyProfile: () => ({ role:'hunter', hp:3, damage:25, speed:1, attackCooldown:1.1 }),
             combatRules: { maxHealth:100, reviveHealth:50, medkitHeal:35, medkitsPerLevel:2, bulletDamage:1,
@@ -1745,6 +1668,9 @@
             boss: null,
             bossDefeated: false,
             restoreLayout: null,
+            progression: Progression.createProgressionState(Combat.combatRules.maxHealth),
+            progressionPaused: false,
+            pendingUpgradeLevel: null,
             coopPlates: [],
             platesUnlocked: false,
             plateCharge: 0,
@@ -2556,14 +2482,15 @@
 
             let speed = 1.6 + (Game.level * 0.35);
             const profile = Combat.getEnemyProfile(currentEnemyType, Game.level);
+            const levelProfile = Progression.getLevelProfile(Game.level);
             let enemyData = {
                 mesh: eGroup,
                 type: currentEnemyType,
                 role: profile.role,
-                speed: speed * profile.speed,
-                hp: profile.hp,
-                maxHp: profile.hp,
-                damage: profile.damage,
+                speed: speed * profile.speed * Math.min(1.28, levelProfile.enemyScale),
+                hp: Math.max(1, Math.round(profile.hp * levelProfile.enemyScale)),
+                maxHp: Math.max(1, Math.round(profile.hp * levelProfile.enemyScale)),
+                damage: Math.max(1, Math.round(profile.damage * levelProfile.enemyScale)),
                 attackCooldown: profile.attackCooldown,
                 attackTimer: 0,
                 x: x,
@@ -2991,7 +2918,45 @@
             scene.add(playerMesh);
         }
 
+        function weaponRoleForShooter(shooter) {
+            if (Net.role === 'solo') return 'solo';
+            return shooter === playerMesh ? 'host' : 'guest';
+        }
+
+        function finishReload(role) {
+            const p = Game.progression;
+            if (!p.reloadUntil[role]) return;
+            if (Date.now() >= p.reloadUntil[role]) {
+                p.reloadUntil[role] = 0;
+                p.ammo[role] = p.weapon.magazineSize;
+            }
+        }
+
+        function reloadWeapon(role = localCombatRole()) {
+            if (Net.role === 'guest') {
+                Net.send({ type:'reload' });
+                return;
+            }
+            const p = Game.progression;
+            finishReload(role);
+            if (p.reloadUntil[role] || p.ammo[role] >= p.weapon.magazineSize) return;
+            p.reloadUntil[role] = Date.now() + p.weapon.reloadTime * 1000;
+            updateWeaponHUD();
+        }
+
         function fireArrow(shooter = playerMesh) {
+            const role = weaponRoleForShooter(shooter);
+            const p = Game.progression;
+            finishReload(role);
+            const now = Date.now();
+            if (p.reloadUntil[role]) return;
+            if (p.ammo[role] <= 0) {
+                reloadWeapon(role);
+                return;
+            }
+            if (now - (p.lastShotAt[role] || 0) < p.weapon.fireCooldown * 1000) return;
+            p.lastShotAt[role] = now;
+            p.ammo[role]--;
             AudioEngine.playShoot();
             let bulletGroup = new THREE.Group();
 
@@ -3007,7 +2972,15 @@
             let dir = new THREE.Vector3(0, 0, 1).applyAxisAngle(new THREE.Vector3(0, 1, 0), shooter.rotation.y).normalize();
 
             scene.add(bulletGroup);
-            Game.arrows.push({ mesh: bulletGroup, dir, speed: 28, origin: shooter.position.clone() });
+            Game.arrows.push({
+                mesh: bulletGroup,
+                dir,
+                speed: p.weapon.projectileSpeed,
+                damage: p.weapon.damage,
+                origin: shooter.position.clone()
+            });
+            if (p.ammo[role] <= 0) reloadWeapon(role);
+            updateWeaponHUD();
         }
 
         function startNewLevel() {
@@ -3027,6 +3000,10 @@
             Game.reviveProgress = 0;
             Game.reviveTarget = null;
             Game.bossDefeated = Net.role === 'guest' ? !!Net.state?.bossDefeated : false;
+            for (const role of ['solo','host','guest']) {
+                Game.progression.ammo[role] = Game.progression.weapon.magazineSize;
+                Game.progression.reloadUntil[role] = 0;
+            }
 
             buildVisualMaze();
 
@@ -3037,7 +3014,9 @@
 
             document.getElementById('hud-level').innerText = Game.level;
             document.getElementById('hud-biome').innerText = Game.currentBiome;
+            updateLevelObjective();
             updateHUD();
+            updateWeaponHUD();
 
             if(AudioEngine.ctx) {
                 AudioEngine.playAmbient(Game.currentBiome);
@@ -3074,6 +3053,7 @@
             AudioEngine.stopAmbient();
             document.getElementById('victory-time').innerText = formatTime(Game.time);
             document.getElementById('victory-score').innerText = Game.score;
+            document.getElementById('upgrade-screen').style.display = 'none';
             document.getElementById('victory-screen').style.display = 'flex';
             if (Net.role === 'host') { Net.frame = 1; Net.sendState(0); }
             if (Net.role !== 'solo') Net.persistSession({ inGame:false });
@@ -3157,7 +3137,10 @@
             Game.coopDowned[role + 'Timer'] = 0;
             Game.reviveProgress = 0;
             Game.reviveTarget = null;
-            Game.health[role] = Combat.combatRules.reviveHealth;
+            Game.health[role] = Math.min(
+                Game.maxHealth,
+                Combat.combatRules.reviveHealth + (Game.progression.reviveHealthBonus || 0)
+            );
             const target = role === 'host' ? playerMesh : Net.remote;
             if (target) {
                 target.rotation.z = 0;
@@ -3406,6 +3389,116 @@
             document.getElementById('hud-extralife-bar').style.width = Math.min(100, pct) + '%';
             updateCombatHUD();
             updateBossHUD();
+            updateWeaponHUD();
+        }
+
+        function updateLevelObjective() {
+            const profile = Progression.getLevelProfile(Game.level);
+            document.getElementById('level-objective-title').textContent =
+                'Nivel ' + Game.level + ' · ' + profile.title;
+            document.getElementById('level-objective-text').textContent = profile.objective;
+        }
+
+        function updateWeaponHUD() {
+            if (!Game.progression) return;
+            const p = Game.progression;
+            const role = localCombatRole();
+            const now = Date.now();
+            for (const r of ['solo','host','guest']) {
+                if (p.reloadUntil[r] && now >= p.reloadUntil[r]) {
+                    p.reloadUntil[r] = 0;
+                    p.ammo[r] = p.weapon.magazineSize;
+                }
+            }
+            document.getElementById('weapon-name').textContent =
+                p.weapon.name + ' · DMG ' + p.weapon.damage;
+            document.getElementById('weapon-ammo').textContent =
+                (p.ammo[role] ?? 0) + '/' + p.weapon.magazineSize;
+            const remaining = p.reloadUntil[role]
+                ? Math.max(0, (p.reloadUntil[role] - now) / 1000)
+                : 0;
+            document.getElementById('weapon-status').textContent =
+                remaining > 0 ? 'RECARGANDO ' + remaining.toFixed(1) + 's' : 'LISTO';
+        }
+
+        function updateUpgradeScreen() {
+            const screen = document.getElementById('upgrade-screen');
+            if (!Game.progressionPaused || !Game.pendingUpgradeLevel) {
+                screen.style.display = 'none';
+                return;
+            }
+
+            screen.style.display = 'flex';
+            document.getElementById('upgrade-subtitle').textContent =
+                'Nivel ' + Game.pendingUpgradeLevel + ' superado · prepara el equipo para el nivel ' + Game.level;
+
+            const options = document.getElementById('upgrade-options');
+            const waiting = document.getElementById('upgrade-waiting');
+            const canChoose = Net.role !== 'guest';
+            const choices = Progression.getUpgradeChoices(Game.level);
+            options.innerHTML = '';
+
+            for (const upgrade of choices) {
+                const button = document.createElement('button');
+                button.type = 'button';
+                button.className = 'upgrade-card';
+                button.disabled = !canChoose;
+                button.innerHTML =
+                    '<strong>' + upgrade.name + '</strong>' +
+                    '<span>' + upgrade.description + '</span>';
+                button.onclick = () => chooseTeamUpgrade(upgrade.id);
+                options.appendChild(button);
+            }
+
+            waiting.textContent = canChoose
+                ? 'La mejora se aplica a toda la expedición.'
+                : 'Esperando que el anfitrión elija la mejora del equipo…';
+        }
+
+        function chooseTeamUpgrade(id) {
+            if (!Game.progressionPaused || Net.role === 'guest') return;
+            const upgrade = Progression.applyUpgrade(Game.progression, id, Game);
+            if (!upgrade) return;
+
+            Game.maxHealth = Game.progression.maxHealth || Game.maxHealth;
+            for (const role of ['solo','host','guest']) {
+                Game.health[role] = Math.min(Game.maxHealth, Game.health[role] ?? Game.maxHealth);
+            }
+
+            Game.progressionPaused = false;
+            Game.pendingUpgradeLevel = null;
+            document.getElementById('upgrade-screen').style.display = 'none';
+            Net.status(Net.role === 'solo'
+                ? 'Mejora aplicada: ' + upgrade.name
+                : 'Mejora de equipo aplicada: ' + upgrade.name);
+            startNewLevel();
+            if (Net.role === 'host') {
+                Net.frame = 1;
+                Net.sendState(0);
+            }
+        }
+
+        function completeLevel() {
+            if (Game.progressionPaused) return;
+
+            const completedLevel = Game.level;
+            const profile = Progression.getLevelProfile(completedLevel);
+            addScore(profile.reward || 0);
+            Game.portalCharge = 0;
+            Game.level++;
+
+            if (Game.level > 11) {
+                triggerVictory();
+                return;
+            }
+
+            Game.pendingUpgradeLevel = completedLevel;
+            Game.progressionPaused = true;
+            updateUpgradeScreen();
+            if (Net.role === 'host') {
+                Net.frame = 1;
+                Net.sendState(0);
+            }
         }
 
         function formatTime(sec) {
@@ -3456,6 +3549,7 @@
             AudioEngine.stopAmbient();
             document.getElementById('final-time').innerText = formatTime(Game.time);
             document.getElementById('final-score').innerText = Game.score;
+            document.getElementById('upgrade-screen').style.display = 'none';
             document.getElementById('game-over-screen').style.display = 'flex';
             if (Net.role === 'host') { Net.frame = 1; Net.sendState(0); }
             if (Net.role !== 'solo') Net.persistSession({ inGame:false });
@@ -3464,6 +3558,7 @@
         setInterval(() => {
             if (!Game.isReady || Game.gameOver) return;
             if (Net.role !== 'solo' && !Net.peerConnected) return;
+            if (Game.progressionPaused) return;
 
             Game.time++;
             Game.survivalTimer++;
@@ -3498,6 +3593,11 @@
 
             if (e.code === 'KeyE' || (e.key || '').toLowerCase() === 'e') {
                 Game.keys.Interact = true;
+                e.preventDefault();
+            }
+
+            if (e.code === 'KeyR' || (e.key || '').toLowerCase() === 'r') {
+                reloadWeapon();
                 e.preventDefault();
             }
 
@@ -3578,6 +3678,13 @@
             }
 
             if (Net.role === 'guest' && Net.state?.gameOver) { renderer.render(scene, camera); return; }
+            if (Game.progressionPaused) {
+                updateUpgradeScreen();
+                updateWeaponHUD();
+                if (Net.role === 'host') Net.sendState(delta);
+                renderer.render(scene, camera);
+                return;
+            }
             if (Net.role !== 'solo' && !Net.peerConnected) {
                 updateTeammateMarker();
                 updateReviveUI();
@@ -3658,6 +3765,7 @@
             camera.lookAt(playerMesh.position.x, playerMesh.position.y + 0.6, playerMesh.position.z);
             updateTeammateMarker();
             updateReviveUI();
+            updateWeaponHUD();
 
             if (Net.role === 'guest') {
                 Net.sendPose(delta);
@@ -3697,7 +3805,7 @@
                             break;
                         }
 
-                        enemy.hp = Math.max(0, enemy.hp - Combat.combatRules.bulletDamage);
+                        enemy.hp = Math.max(0, enemy.hp - (arrow.damage || Combat.combatRules.bulletDamage));
                         if (enemy.isBoss && enemy.hp <= enemy.maxHp * 0.5) {
                             enemy.mesh.traverse(obj => {
                                 if (obj.isMesh && obj.material && 'emissiveIntensity' in obj.material) {
@@ -3923,9 +4031,7 @@
             if (Net.role === 'solo') {
                 const soloPortalUnlocked = Game.level !== Combat.combatRules.boss.level || Game.bossDefeated;
                 if (localAtGoal && soloPortalUnlocked) {
-                    Game.level++;
-                    Game.portalCharge = 0;
-                    startNewLevel();
+                    completeLevel();
                 }
             } else if (Net.role === 'host') {
                 Game.portalStatus = { hostAtGoal: localAtGoal, guestAtGoal: remoteAtGoal };
@@ -3935,9 +4041,7 @@
                 else Game.portalCharge = 0;
                 updateCoopObjective(localAtGoal, remoteAtGoal, Game.portalCharge);
                 if (portalUnlocked && Game.portalCharge >= 1.5) {
-                    Game.portalCharge = 0;
-                    Game.level++;
-                    startNewLevel();
+                    completeLevel();
                 }
             }
 
@@ -3993,6 +4097,12 @@
             Game.reviveProgress = Number(snapshot.reviveProgress) || 0;
             Game.reviveTarget = snapshot.reviveTarget || null;
             Game.health = snapshot.health || { solo:Game.maxHealth, host:Game.maxHealth, guest:Game.maxHealth };
+            if (snapshot.progression) {
+                Game.progression = snapshot.progression;
+                Game.maxHealth = snapshot.progression.maxHealth || Game.maxHealth;
+            }
+            Game.progressionPaused = !!snapshot.progressionPaused;
+            Game.pendingUpgradeLevel = snapshot.pendingUpgradeLevel || null;
             Game.bossDefeated = !!snapshot.bossDefeated;
             Game.restoreLayout = snapshot.layout;
 
@@ -4061,6 +4171,9 @@
             syncCoopPlateVisuals();
             updateHUD();
             updateBossHUD(snapshot?.boss);
+            updateLevelObjective();
+            updateWeaponHUD();
+            updateUpgradeScreen();
             document.getElementById('lobby-panel').style.display = 'none';
             document.getElementById('online-entry').style.display = 'none';
             updateCoopObjective(
@@ -4086,7 +4199,12 @@
             Game.scoreAccumulatorForExtraLife = 0;
             Game.portalCharge = 0;
             Game.portalStatus = { hostAtGoal: false, guestAtGoal: false };
+            Game.maxHealth = Combat.combatRules.maxHealth;
             Game.health = { solo: Game.maxHealth, host: Game.maxHealth, guest: Game.maxHealth };
+            Game.progression = Progression.createProgressionState(Game.maxHealth);
+            Game.progressionPaused = false;
+            Game.pendingUpgradeLevel = null;
+            document.getElementById('upgrade-screen').style.display = 'none';
             Game.medkits = [];
             Game.boss = null;
             Game.bossDefeated = false;
@@ -4109,6 +4227,8 @@
             Game.cameraOrbit.radius = 16; 
             
             updateHUD();
+            updateLevelObjective();
+            updateWeaponHUD();
             startNewLevel();
             Game.isReady = true;
         }
