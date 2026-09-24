@@ -134,6 +134,7 @@ const BattleMode = (() => {
     codeEl.textContent = roomCode || '------';
     readyBtn.textContent = ready ? '✓ Listo' : 'Estoy listo';
     readyBtn.classList.toggle('active', ready);
+    readyBtn.disabled = !participants.has(clientId) || active;
 
     const allReady = presence.length >= MIN_PLAYERS &&
       presence.length <= MAX_PLAYERS &&
@@ -150,6 +151,12 @@ const BattleMode = (() => {
 
   async function syncPresence() {
     updateLobby();
+
+    if (isHost && presence.length > MAX_PLAYERS) {
+      const overflow = presence.slice(MAX_PLAYERS).map(p => p.id);
+      if (overflow.length) send('battle_reject',{ids:overflow,reason:'La sala alcanzó el máximo de '+MAX_PLAYERS+' jugadores.'});
+    }
+
     if (!isHost && role === 'guest' && !active) {
       const host = presence.find(p => p.host);
       if (!host) return;
@@ -235,6 +242,7 @@ const BattleMode = (() => {
             setStatus('Sala ' + roomCode + ' creada · comparte el código.');
             updateLobby();
           } else {
+            openLobby();
             setStatus('Buscando sala ' + roomCode + '…');
             let tries = 0;
             const probe = async () => {
@@ -289,6 +297,10 @@ const BattleMode = (() => {
       applySnapshot(msg);
     } else if (msg.type === 'battle_end' && active) {
       endBattle(msg.winner, msg.players || []);
+    } else if (msg.type === 'battle_reject' && Array.isArray(msg.ids) && msg.ids.includes(clientId)) {
+      setStatus(msg.reason || 'No fue posible entrar a la sala.', true);
+      ready = false;
+      disconnect({closeUi:false}).catch(console.error);
     }
   }
 
