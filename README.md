@@ -1,22 +1,47 @@
-# Explorador Extremo V11 · cooperativo online
+# Explorador Extremo V12 · cooperativo online
 
-Copia independiente del juego del profesor Juan Neira (crédito conservado en pantalla). Dos personas pueden jugar en una sala con código: el anfitrión simula la partida y el invitado recibe el estado mediante Supabase Realtime. Ambos deben llegar al portal de salida. También conserva el modo individual.
+Copia independiente del juego del profesor Juan Neira (crédito conservado en pantalla). La V12 mantiene el modo individual y refuerza el cooperativo de dos jugadores usando Supabase Realtime.
+
+## Novedades V12
+
+- Lobby cooperativo con nombre de jugador.
+- Estados **LISTO / NO LISTO** para ambos exploradores.
+- El anfitrión solo puede iniciar cuando los dos jugadores están conectados y listos.
+- Código de sala de seis dígitos.
+- Invitación mediante enlace con `?sala=XXXXXX`.
+- Reintentos acotados al entrar a una sala para evitar quedar esperando indefinidamente.
+- Estado de conexión y lobby actualizado mediante Supabase Presence.
+- Movimiento, disparos y estado del mundo sincronizados mediante Realtime Broadcast.
+- Portal cooperativo: en online ambos jugadores deben llegar a la salida y permanecer juntos durante 1,5 segundos para activar el siguiente nivel.
+- Indicador visual de progreso de activación del portal.
+
+## Arquitectura online
+
+El anfitrión es autoritativo: ejecuta la física, enemigos, trampas, puntaje y progresión. El invitado envía su pose y acciones, mientras recibe instantáneas del mundo.
+
+Las salas son efímeras y usan **Realtime Broadcast + Presence**. No requieren tablas SQL para funcionar. El código de sala no constituye autenticación.
+
+El proyecto configurado en `supabase.public.json` usa exclusivamente URL y clave **publicable**. Nunca debe utilizarse una secret key o `service_role` en el navegador.
 
 ## Publicar en Vercel
 
-1. El proyecto Supabase de este juego ya está configurado mediante `supabase.public.json`. Contiene únicamente la URL y la clave **publicable**. Nunca uses una secret key o `service_role` en el navegador.
-2. Importa este repositorio en Vercel. El directorio raíz es este proyecto. El comando `npm run build` produce `dist/`, según `vercel.json`.
-3. Las variables `SUPABASE_URL` y `SUPABASE_PUBLISHABLE_KEY` son opcionales y permiten sustituir la configuración pública durante el build. No necesitas configurarlas para este proyecto.
-4. Publica y prueba el enlace HTTPS desde dos navegadores de escritorio: **Crear sala cooperativa** en uno, **Unirse** con el código en el otro. Usa las flechas y la barra espaciadora; el juego original requiere teclado y ratón.
-
-No requiere tablas ni políticas SQL: las salas efímeras usan canales públicos de **Realtime Broadcast y Presence**. El código de seis dígitos permite entrar a una sala, por lo que no debe tratarse como autenticación ni compartirse ampliamente. No se almacenan partidas: al desconectarse el anfitrión se cierra la sala. Supabase tiene límites de mensajes y conexiones según el plan contratado.
+1. Importa este repositorio en Vercel.
+2. El comando `npm run build` genera `dist/`, según `vercel.json`.
+3. `SUPABASE_URL` y `SUPABASE_PUBLISHABLE_KEY` son opcionales; si no están definidas, el build usa `supabase.public.json`.
+4. Prueba el despliegue desde dos navegadores o dispositivos distintos: uno crea la sala y comparte el enlace; el otro se une, ambos marcan **Estoy listo** y el anfitrión inicia la expedición.
 
 ## Desarrollo local
 
-`npm ci` y después `npm run build`. Sirve la carpeta `dist` mediante un servidor estático (por ejemplo `npx serve dist`). Abrir `index.html` directamente con `file://` no es equivalente a servirlo por HTTP.
+```bash
+npm ci
+npm run build
+npx serve dist
+```
 
-La versión del curso tenía un cierre de testing el 3 de octubre de 2026. En esta copia se desactivó ese cierre para permitir jugar después de esa fecha. El archivo original sigue separado.
+Abrir `index.html` directamente con `file://` no equivale a servirlo por HTTP.
+
+La versión del curso tenía un cierre de testing el 3 de octubre de 2026. Esta edición cooperativa mantiene ese cierre desactivado.
 
 ## Validación
 
-El build y la sintaxis del script se comprobaron. La variante previa de salas con servidor WebSocket se probó con dos clientes automatizados. La nueva conexión Supabase Realtime **aún requiere prueba de extremo a extremo con un proyecto real y dos navegadores** antes de darla por lista para compartir.
+La sintaxis del script principal se comprueba antes de publicar. La validación funcional final debe hacerse con dos clientes reales conectados al mismo despliegue HTTPS, verificando lobby, Presence, movimiento, disparos, cambio de nivel y desconexión.
