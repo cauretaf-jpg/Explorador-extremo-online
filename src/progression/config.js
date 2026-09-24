@@ -17,7 +17,7 @@ const upgradeCatalog = [
     id:'damage',
     name:'Munición reforzada',
     description:'+1 daño por disparo.',
-    apply(state){ state.weapon.damage += 1; }
+    apply(state){ state.weapon.damage += 1; state.weapon.name = 'Rifle pesado'; }
   },
   {
     id:'magazine',
@@ -25,6 +25,7 @@ const upgradeCatalog = [
     description:'+4 balas por cargador y recarga completa.',
     apply(state){
       state.weapon.magazineSize += 4;
+      state.weapon.name = 'Carabina táctica';
       for (const role of ['solo','host','guest']) state.ammo[role] = state.weapon.magazineSize;
     }
   },
@@ -32,13 +33,13 @@ const upgradeCatalog = [
     id:'rapid',
     name:'Mecanismo rápido',
     description:'15% menos tiempo entre disparos.',
-    apply(state){ state.weapon.fireCooldown = Math.max(0.10, state.weapon.fireCooldown * 0.85); }
+    apply(state){ state.weapon.fireCooldown = Math.max(0.10, state.weapon.fireCooldown * 0.85); state.weapon.name = 'Carabina rápida'; }
   },
   {
     id:'velocity',
     name:'Cañón de precisión',
     description:'+18% velocidad de proyectil.',
-    apply(state){ state.weapon.projectileSpeed *= 1.18; }
+    apply(state){ state.weapon.projectileSpeed *= 1.18; state.weapon.name = 'Rifle de precisión'; }
   },
   {
     id:'vitality',
