@@ -2858,6 +2858,7 @@
 
             document.getElementById('hud-level').innerText = Game.level;
             document.getElementById('hud-biome').innerText = Game.currentBiome;
+            updateHUD();
 
             if(AudioEngine.ctx) {
                 AudioEngine.playAmbient(Game.currentBiome);
@@ -2954,6 +2955,7 @@
             }
 
             // En cooperativo, 0 HP abre la ventana de rescate.
+            Game.health[role] = 0;
             Game.coopDowned[role] = true;
             Game.coopDowned[role + 'Timer'] = 12;
             Game.reviveTarget = null;
@@ -3650,8 +3652,8 @@
                     let bladeWorldPos = new THREE.Vector3();
                     trap.blade.getWorldPosition(bladeWorldPos);
                     let bladeDist = Math.min(
-                    Math.hypot(playerMesh.position.x - bladeWorldPos.x, playerMesh.position.z - bladeWorldPos.z),
-                    Net.remote ? Math.hypot(Net.remote.position.x - bladeWorldPos.x, Net.remote.position.z - bladeWorldPos.z) : Infinity
+                    Game.coopDowned.host ? Infinity : Math.hypot(playerMesh.position.x - bladeWorldPos.x, playerMesh.position.z - bladeWorldPos.z),
+                    Net.remote && !Game.coopDowned.guest ? Math.hypot(Net.remote.position.x - bladeWorldPos.x, Net.remote.position.z - bladeWorldPos.z) : Infinity
                 );
                     if (bladeDist < 0.8 && trap.cooldown <= 0) { handlePlayerDeath(36); trap.cooldown = 1.2; }
                 } else if (trap.type === 'geiser') {
@@ -3799,6 +3801,7 @@
             startNewLevel();
             Game.isReady = true;
             Game.clock.start();
+            updateHUD();
             if (Net.role === 'host') Net.makeRemote();
             if (Net.role === 'guest') Net.readyLevel = Game.level;
             document.getElementById('lobby-panel').style.display = 'none';
