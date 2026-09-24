@@ -44,9 +44,12 @@ const upgradeCatalog = [
     id:'vitality',
     name:'Equipo médico',
     description:'+20 HP máximos y cura inmediata.',
-    apply(state){
+    apply(state, game){
       state.maxHealth += 20;
-      for (const role of ['solo','host','guest']) state.health[role] = state.maxHealth;
+      if (game) {
+        game.maxHealth = state.maxHealth;
+        for (const role of ['solo','host','guest']) game.health[role] = game.maxHealth;
+      }
     }
   },
   {
@@ -66,10 +69,10 @@ function getUpgradeChoices(level) {
   return [0,1,2].map(offset => upgradeCatalog[(start + offset * 2) % upgradeCatalog.length]);
 }
 
-function applyUpgrade(state, id) {
+function applyUpgrade(state, id, game = null) {
   const upgrade = upgradeCatalog.find(item => item.id === id);
   if (!upgrade) return null;
-  upgrade.apply(state);
+  upgrade.apply(state, game);
   state.upgrades.push(id);
   return upgrade;
 }
