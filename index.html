@@ -8,6 +8,7 @@
     <script src="./supabase-client.js"></script>
     <script src="./config.js"></script>
     <script src="./combat-config.js"></script>
+    <script src="./network-session.js"></script>
     <style>
         * {
             box-sizing: border-box;
@@ -537,7 +538,7 @@
     <div id="menu-screen" class="overlay">
         <h1>Explorador Extremo 3D</h1>
         <div class="author-tag">Autor del Juego: Profesor Juan Neira</div>
-        <div class="subtitle">V12.3 · Combate cooperativo</div>
+        <div class="subtitle">V12.4 · Estabilidad online</div>
         <button class="btn" id="btn-start">Jugar solo</button>
 
         <div id="online-entry">
@@ -548,6 +549,7 @@
                 <button class="btn" id="btn-join">Unirse</button>
             </div>
             <div id="room-status" role="status" style="color:#00ffcc;margin:10px 4px 0;font-weight:bold;text-align:center"></div>
+            <button class="btn" id="btn-resume-session" style="display:none;margin:10px auto 0;padding:10px 22px;font-size:.92rem">Reanudar sala</button>
         </div>
 
         <div id="lobby-panel" aria-live="polite">
@@ -574,6 +576,7 @@
             • Cooperativo: <strong>activen las dos placas simultáneamente desde el nivel 2</strong><br>
             • Salud: <strong>busca botiquines para recuperar HP</strong><br>
             • Nivel 3: <strong>derroten al Guardián del Desierto para abrir el portal</strong><br>
+            • Online: <strong>la partida se pausa y reconecta automáticamente ante cortes breves</strong><br>
             • Rotar Vista 360°: <strong>Mantener Click Izquierdo y arrastrar</strong><br>
             • Zoom de Perspectiva: <strong>Rueda del Mouse (Scroll)</strong><br><br>
             ¡Recorre los biomas evitando trampas y enemigos en caminos 3D!
@@ -1110,12 +1113,77 @@
             }
         };
 
+        const NetworkSession = window.ExploradorNetworkSession;
+
         // El anfitrión ejecuta la física; el invitado recibe instantáneas del mundo.
         const Net = {
             role: 'solo', channel: null, code: null, state: null, remote: null,
             frame: 0, poseTimer: 0, hitTarget: null, starting: false, peerConnected: false, tracked: false, subscribed: false,
             name: '', ready: false, presenceKey: null, hostInfo: null, guestInfo: null, guestProbeTimer: null, guestProbeCount: 0,
             remoteInteract: false,
+            reconnectController: null, intentionalClose: false, reconnecting: false,
+            lastSnapshotAt: 0,
+            persistSession(extra = {}) {
+                if (!NetworkSession || this.role === 'solo' || !/^\d{6}$/.test(this.code || '')) return;
+                NetworkSession.saveSession({
+                    role: this.role,
+                    code: this.code,
+                    name: this.name,
+                    ready: this.ready,
+                    presenceKey: this.presenceKey,
+                    inGame: !!Game?.isReady && !Game?.gameOver,
+                    level: Game?.level || 1,
+                    ...extra
+                });
+            },
+            setupReconnectController() {
+                if (!NetworkSession) return;
+                if (this.reconnectController) this.reconnectController.stop();
+                this.reconnectController = NetworkSession.createReconnectController({
+                    onReconnect: async () => {
+                        if (this.role === 'solo' || !this.code || this.subscribed) return;
+                        this.reconnecting = true;
+                        await this.connectRoom(this.role, this.code, {
+                            reconnect: true,
+                            preserveReady: true,
+                            presenceKey: this.presenceKey
+                        });
+                    },
+                    onStatus: message => this.status(message)
+                });
+            },
+            scheduleReconnect(reason) {
+                if (this.role === 'solo' || this.intentionalClose) return;
+                this.subscribed = false;
+                this.tracked = false;
+                this.reconnectController?.schedule(reason);
+            },
+            async resumeSavedSession(session) {
+                if (!session || !['host','guest'].includes(session.role) || !/^\d{6}$/.test(session.code || '')) return;
+                this.name = String(session.name || '').slice(0, 18);
+                if (this.name.length < 2) return this.status('No se pudo recuperar el nombre de la sesión.');
+                document.getElementById('player-name').value = this.name;
+                document.getElementById('room-code').value = session.code;
+                this.ready = !!session.ready;
+                this.presenceKey = session.presenceKey || null;
+                this.status('Recuperando sala ' + session.code + '…');
+                await this.connectRoom(session.role, session.code, {
+                    reconnect: true,
+                    preserveReady: true,
+                    presenceKey: this.presenceKey,
+                    resumeSession: session
+                });
+            },
+            uniqueParticipants() {
+                if (!this.channel) return [];
+                const raw = Object.values(this.channel.presenceState()).flat();
+                const map = new Map();
+                for (const participant of raw) {
+                    const key = participant.clientId || participant.role + ':' + participant.name;
+                    map.set(key, participant);
+                }
+                return [...map.values()];
+            },
             send(message) {
                 if (this.channel) this.channel.send({ type: 'broadcast', event: 'game', payload: message })
                     .then(result => { if (result !== 'ok') console.warn('No se pudo enviar mensaje:', result); });
@@ -1164,6 +1232,7 @@
                 if (this.role === 'solo' || !this.tracked) return;
                 this.ready = !this.ready;
                 this.refreshPresence().catch(console.error);
+                this.persistSession();
                 this.updateLobby();
             },
             canHostStart() {
@@ -1171,7 +1240,7 @@
             },
             updateLobby(participants) {
                 if (this.role === 'solo') return;
-                const all = participants || (this.channel ? Object.values(this.channel.presenceState()).flat() : []);
+                const all = participants || this.uniqueParticipants();
                 this.hostInfo = all.find(p => p.role === 'host') || this.hostInfo;
                 this.guestInfo = all.find(p => p.role === 'guest') || null;
                 document.getElementById('lobby-panel').style.display = 'block';
@@ -1206,18 +1275,34 @@
                     () => this.status('Sala ' + this.code + ' · comparte este código con el segundo explorador.')
                 );
             },
-            async connectRoom(action, code) {
+            async connectRoom(action, code, options = {}) {
                 const cfg = window.EXPLORADOR_CONFIG;
                 if (!cfg?.url || !cfg?.publishableKey) return this.status('La conexión online aún no está configurada.');
-                if (this.channel) await this.client.removeChannel(this.channel);
+
+                if (this.channel) {
+                    this.intentionalClose = true;
+                    try { await this.client.removeChannel(this.channel); } finally { this.intentionalClose = false; }
+                    this.channel = null;
+                }
+
                 this.client ||= window.createSupabaseClient(cfg.url, cfg.publishableKey);
-                this.role = action === 'create' ? 'host' : 'guest';
-                this.code = action === 'create' ? String(crypto.getRandomValues(new Uint32Array(1))[0] % 900000 + 100000) : String(code);
+                const requestedRole = action === 'create' ? 'host' : action === 'join' ? 'guest' : action;
+                if (!['host','guest'].includes(requestedRole)) return this.status('No se pudo determinar el rol de la sala.');
+                this.role = requestedRole;
+                this.code = action === 'create' && !options.reconnect
+                    ? String(crypto.getRandomValues(new Uint32Array(1))[0] % 900000 + 100000)
+                    : String(code || this.code || '');
                 if (!/^\d{6}$/.test(this.code)) { this.role = 'solo'; return this.status('Escribe un código de seis dígitos.'); }
+
+                const preservedReady = this.ready;
                 this.peerConnected = false; this.tracked = false; this.subscribed = false;
-                this.ready = false; this.hostInfo = null; this.guestInfo = null; this.guestProbeCount = 0;
+                if (!options.preserveReady) this.ready = false;
+                else this.ready = preservedReady;
+                this.hostInfo = null; this.guestInfo = null; this.guestProbeCount = 0;
                 clearTimeout(this.guestProbeTimer);
-                this.presenceKey = Array.from(crypto.getRandomValues(new Uint8Array(16)), byte => byte.toString(16).padStart(2, '0')).join('');
+                this.presenceKey = options.presenceKey || this.presenceKey ||
+                    Array.from(crypto.getRandomValues(new Uint8Array(16)), byte => byte.toString(16).padStart(2, '0')).join('');
+                this.setupReconnectController();
                 this.channel = this.client.channel('explorador:' + this.code, {
                     config: { broadcast: { self: false }, presence: { key: this.presenceKey } }
                 });
@@ -1228,23 +1313,37 @@
                         clearTimeout(this.connectTimer);
                         if (status === 'SUBSCRIBED') {
                             this.subscribed = true;
+                            this.reconnecting = false;
+                            this.reconnectController?.reset();
                             try {
                                 if (this.role === 'host') {
                                     await this.trackSelf();
-                                    this.status('Sala ' + this.code + ' creada · comparte la invitación y espera al segundo explorador.');
+                                    this.status(options.reconnect
+                                        ? 'Sala ' + this.code + ' reconectada.'
+                                        : 'Sala ' + this.code + ' creada · comparte la invitación y espera al segundo explorador.');
                                     this.updateLobby();
+                                    this.persistSession();
+                                    if (options.resumeSession?.inGame && options.resumeSession?.snapshot && !Game.isReady) {
+                                        setTimeout(() => restoreHostSnapshot(options.resumeSession.snapshot), 80);
+                                    }
                                 } else {
-                                    this.status('Buscando al anfitrión de la sala ' + this.code + '…');
+                                    this.status(options.reconnect
+                                        ? 'Reconectando con el anfitrión de la sala ' + this.code + '…'
+                                        : 'Buscando al anfitrión de la sala ' + this.code + '…');
                                     this.guestProbeTimer = setTimeout(() => this.syncPresence().catch(console.error), 350);
+                                    this.persistSession();
                                 }
                             } catch (error) {
                                 console.error('Error de presencia:', error);
-                                this.status('No se pudo registrar al jugador en la sala. Vuelve a intentarlo.');
+                                this.status('No se pudo registrar al jugador en la sala. Reintentando…');
+                                this.scheduleReconnect('presence_error');
                             }
                         } else if (status === 'CHANNEL_ERROR' || status === 'TIMED_OUT') {
-                            this.status('No se pudo conectar al servidor de salas. Revisa tu conexión y vuelve a intentarlo.');
+                            this.status('Problema de conexión con la sala · intentando recuperar la sesión…');
+                            this.scheduleReconnect(status.toLowerCase());
                         } else if (status === 'CLOSED' && this.role !== 'solo') {
-                            this.status('La conexión con la sala se cerró. Supabase intentará reconectar automáticamente.');
+                            this.status('La conexión con la sala se cerró · intentando reconectar…');
+                            this.scheduleReconnect('channel_closed');
                         }
                     });
                 this.connectTimer = setTimeout(() => {
@@ -1253,7 +1352,7 @@
             },
             async syncPresence() {
                 if (!this.channel || !this.subscribed || this.role === 'solo') return;
-                let participants = Object.values(this.channel.presenceState()).flat();
+                let participants = this.uniqueParticipants();
                 let hosts = participants.filter(p => p.role === 'host');
                 let guests = participants.filter(p => p.role === 'guest');
 
@@ -1275,17 +1374,21 @@
                         return;
                     }
                     this.guestProbeCount = 0;
-                    if (guests.length) {
+                    const otherGuests = guests.filter(p => p.clientId !== this.presenceKey);
+                    if (otherGuests.length) {
                         this.status('La sala ya tiene dos jugadores.');
                         return;
                     }
                     await this.trackSelf();
                     this.send({ type: 'hello', name: this.name });
-                    this.status('Conectado a sala ' + this.code + ' · marca “Estoy listo”.');
+                    this.persistSession();
+                    this.status(Game.isReady
+                        ? 'Conexión recuperada · volviendo a la expedición.'
+                        : 'Conectado a sala ' + this.code + ' · marca “Estoy listo”.');
                     return;
                 }
 
-                participants = Object.values(this.channel.presenceState()).flat();
+                participants = this.uniqueParticipants();
                 hosts = participants.filter(p => p.role === 'host');
                 guests = participants.filter(p => p.role === 'guest');
                 this.hostInfo = hosts[0] || null;
@@ -1302,16 +1405,22 @@
                         this.status('Segundo explorador conectado · ambos deben marcar LISTO.');
                     }
                     this.makeRemote();
+                    if (this.remote) this.remote.visible = true;
                 } else if (this.role === 'host' && !guests.length) {
                     this.peerConnected = false;
                     this.guestInfo = null;
-                    if (this.remote && !Game.isReady) { this.remote.removeFromParent(); this.remote = null; }
-                    this.status('Sala ' + this.code + ' · esperando al segundo explorador.');
+                    if (this.remote) this.remote.visible = false;
+                    this.status(Game.isReady
+                        ? 'Compañero desconectado · partida pausada mientras se reconecta.'
+                        : 'Sala ' + this.code + ' · esperando al segundo explorador.');
                 } else if (this.role === 'guest' && this.tracked && !hosts.length) {
-                    this.status('El anfitrión se desconectó. La partida quedó pausada.');
+                    this.peerConnected = false;
+                    this.status('El anfitrión se desconectó · partida pausada mientras vuelve.');
                 } else if (this.role === 'guest' && this.tracked) {
                     this.peerConnected = true;
-                    this.status('Conectado a sala ' + this.code + ' · ambos deben marcar LISTO.');
+                    this.status(Game.isReady
+                        ? 'Conexión recuperada · expedición sincronizada.'
+                        : 'Conectado a sala ' + this.code + ' · ambos deben marcar LISTO.');
                 }
             },
             handleMessage(msg) {
@@ -1368,7 +1477,7 @@
                     ...Game.medkits.map(m => ({ kind: 'medkit', x: m.x, z: m.z })),
                     ...Game.coopPlates.map(p => ({ kind: 'plate', id: p.id, x: p.x, z: p.z }))
                 ];
-                this.send({ type: 'state', state: {
+                const state = {
                     level: Game.level, maze: Game.maze, layout,
                     enemies: Game.enemies.map(e => ({
                         x: e.x, z: e.z, px: e.mesh.position.x, pz: e.mesh.position.z,
@@ -1396,7 +1505,22 @@
                         name: Game.boss.name, shielded: !isBossVulnerable()
                     } : null,
                     gameOver: Game.gameOver
-                }});
+                };
+
+                const now = performance.now();
+                if (now - this.lastSnapshotAt >= 1000) {
+                    this.lastSnapshotAt = now;
+                    this.persistSession({
+                        inGame: Game.isReady && !Game.gameOver,
+                        level: Game.level,
+                        snapshot: {
+                            ...state,
+                            shots: [],
+                            enemyShots: []
+                        }
+                    });
+                }
+                this.send({ type: 'state', state });
             },
             applyState(state) {
                 if (!Game.isReady) {
@@ -1512,6 +1636,28 @@
             document.getElementById('room-code').value = invitedRoom;
             document.getElementById('room-status').textContent = 'Invitación detectada · escribe tu nombre y presiona Unirse.';
         }
+
+        const savedOnlineSession = NetworkSession?.loadSession?.();
+        const resumeButton = document.getElementById('btn-resume-session');
+        if (savedOnlineSession &&
+            /^\d{6}$/.test(savedOnlineSession.code || '') &&
+            ['host','guest'].includes(savedOnlineSession.role) &&
+            (!invitedRoom || invitedRoom === savedOnlineSession.code)) {
+            resumeButton.style.display = 'block';
+            resumeButton.textContent = 'Reanudar sala ' + savedOnlineSession.code;
+            resumeButton.onclick = () => {
+                resumeButton.disabled = true;
+                Net.resumeSavedSession(savedOnlineSession).catch(error => {
+                    console.error(error);
+                    resumeButton.disabled = false;
+                    Net.status('No se pudo recuperar la sesión. Puedes crear o unirte a una sala manualmente.');
+                });
+            };
+        }
+
+        window.addEventListener('beforeunload', () => {
+            if (Net.role !== 'solo') Net.persistSession();
+        });
 
         // --- ESTADO Y CONFIGURACIÓN GLOBAL ---
         const playerHeight = 1.7; // Altura exacta de la entidad explorador extremo
@@ -3396,6 +3542,12 @@
             }
 
             if (Net.role === 'guest' && Net.state?.gameOver) { renderer.render(scene, camera); return; }
+            if (Net.role !== 'solo' && !Net.peerConnected) {
+                updateTeammateMarker();
+                updateReviveUI();
+                renderer.render(scene, camera);
+                return;
+            }
             let moveSpeed = 7.0 * delta;
             let moving = false;
 
