@@ -1363,7 +1363,7 @@
                 this.frame = 0;
                 const layout = [
                     ...Game.prizes.map(p => ({ kind: 'prize', x: p.x, z: p.z, points: p.points })),
-                    ...Game.enemies.map(e => ({ kind: 'enemy', x: e.x, z: e.z })),
+                    ...Game.enemies.map(e => ({ kind: e.isBoss ? 'boss' : 'enemy', x: e.x, z: e.z })),
                     ...Game.traps.map(t => ({ kind: 'trap', x: t.x, z: t.z })),
                     ...Game.medkits.map(m => ({ kind: 'medkit', x: m.x, z: m.z })),
                     ...Game.coopPlates.map(p => ({ kind: 'plate', id: p.id, x: p.x, z: p.z }))
@@ -2898,33 +2898,67 @@
             if (Net.role === 'host') { Net.frame = 1; Net.sendState(0); }
         }
 
-        function handlePlayerDeath() {
+        function localCombatRole() {
+            if (Net.role === 'solo') return 'solo';
+            return Net.role === 'guest' ? 'guest' : 'host';
+        }
+
+        function roleForTarget(target) {
+            if (Net.role === 'solo') return 'solo';
+            return target === playerMesh ? 'host' : 'guest';
+        }
+
+        function flashDamage(role) {
+            if (role !== localCombatRole()) return;
+            const el = document.getElementById('damage-flash');
+            el.style.opacity = '1';
+            clearTimeout(Game.damageFlashTimer);
+            Game.damageFlashTimer = setTimeout(() => { el.style.opacity = '0'; }, 110);
+        }
+
+        function healRole(role, amount) {
+            if (!(role in Game.health)) return false;
+            const before = Game.health[role];
+            Game.health[role] = Math.min(Game.maxHealth, before + amount);
+            if (Game.health[role] <= before) return false;
+            AudioEngine.playCoin();
+            updateHUD();
+            return true;
+        }
+
+        function handlePlayerDeath(damage = 30) {
             AudioEngine.playHit();
             const damagedTarget = Net.hitTarget || playerMesh;
             Net.hitTarget = null;
 
-            // El modo individual conserva la lógica clásica.
-            if (Net.role === 'solo') {
+            if (Net.role === 'guest') return;
+
+            const role = roleForTarget(damagedTarget);
+            if (role !== 'solo' && Game.coopDowned[role]) return;
+
+            Game.health[role] = Math.max(0, (Game.health[role] ?? Game.maxHealth) - damage);
+            Game.survivalTimer = 0;
+            flashDamage(role);
+            updateHUD();
+
+            if (Game.health[role] > 0) return;
+
+            if (role === 'solo') {
                 Game.lives--;
-                Game.score = Math.max(0, Game.score - 5000);
-                Game.survivalTimer = 0;
+                Game.score = Math.max(0, Game.score - 3500);
+                Game.health.solo = Game.maxHealth;
                 updateHUD();
                 if (Game.lives <= 0) endGame();
                 else playerMesh.position.set(Game.cellSize, 0, Game.cellSize);
                 return;
             }
 
-            // En cooperativo el anfitrión decide quién cae y abre una ventana de rescate.
-            if (Net.role !== 'host') return;
-            const role = damagedTarget === playerMesh ? 'host' : 'guest';
-            if (Game.coopDowned[role]) return;
-
+            // En cooperativo, 0 HP abre la ventana de rescate.
             Game.coopDowned[role] = true;
             Game.coopDowned[role + 'Timer'] = 12;
             Game.reviveTarget = null;
             Game.reviveProgress = 0;
-            Game.score = Math.max(0, Game.score - 2500);
-            Game.survivalTimer = 0;
+            Game.score = Math.max(0, Game.score - 2000);
             damagedTarget.rotation.z = Math.PI / 2;
             updateHUD();
             updateReviveUI();
@@ -2948,6 +2982,7 @@
                 target.position.y = 0;
             }
             addScore(500);
+            updateHUD();
             Net.status((role === 'host' ? (Net.hostInfo?.name || 'Anfitrión') : (Net.guestInfo?.name || 'Invitado')) + ' fue reanimado.');
         }
 
@@ -3133,6 +3168,53 @@
             updateHUD();
         }
 
+        function updateCombatHUD() {
+            const localRole = localCombatRole();
+            const mateRole = localRole === 'host' ? 'guest' : 'host';
+            const localName = localRole === 'solo'
+                ? 'Explorador'
+                : localRole === 'host'
+                    ? (Net.hostInfo?.name || Net.name || 'Anfitrión')
+                    : (Net.guestInfo?.name || Net.name || 'Invitado');
+            const mateName = localRole === 'host'
+                ? (Net.guestInfo?.name || 'Explorador 2')
+                : (Net.hostInfo?.name || 'Anfitrión');
+
+            const localHp = Math.max(0, Math.round(Game.health[localRole] ?? Game.maxHealth));
+            document.getElementById('local-health-name').textContent = localName;
+            document.getElementById('local-health-value').textContent = localHp + '/' + Game.maxHealth;
+            document.getElementById('local-health-fill').style.width = (localHp / Game.maxHealth * 100) + '%';
+
+            const mateRow = document.getElementById('mate-health-row');
+            if (Net.role === 'solo') {
+                mateRow.style.display = 'none';
+            } else {
+                mateRow.style.display = 'block';
+                const mateHp = Math.max(0, Math.round(Game.health[mateRole] ?? Game.maxHealth));
+                document.getElementById('mate-health-name').textContent = mateName;
+                document.getElementById('mate-health-value').textContent = mateHp + '/' + Game.maxHealth;
+                document.getElementById('mate-health-fill').style.width = (mateHp / Game.maxHealth * 100) + '%';
+            }
+        }
+
+        function updateBossHUD(authoritativeBoss = undefined) {
+            const panel = document.getElementById('boss-hud');
+            const boss = authoritativeBoss === undefined
+                ? (Game.boss ? { hp:Game.boss.hp, maxHp:Game.boss.maxHp, name:Game.boss.name, shielded:!isBossVulnerable() } : null)
+                : authoritativeBoss;
+            if (Game.level !== Combat.combatRules.boss.level || Game.bossDefeated || !boss) {
+                panel.style.display = 'none';
+                return;
+            }
+            panel.style.display = 'block';
+            document.getElementById('boss-name').textContent = boss.name || Combat.combatRules.boss.name;
+            const pct = Math.max(0, Math.min(100, (boss.hp / boss.maxHp) * 100));
+            document.getElementById('boss-health-fill').style.width = pct + '%';
+            document.getElementById('boss-status').textContent = boss.shielded
+                ? 'ESCUDO ACTIVO · activa las placas y mantén al equipo en pie'
+                : (pct <= 50 ? 'FASE 2 · ENFURECIDO' : 'VULNERABLE');
+        }
+
         function updateHUD() {
             document.getElementById('hud-lives').innerText = Game.lives;
             document.getElementById('hud-score').innerText = Game.score;
@@ -3140,6 +3222,8 @@
             document.getElementById('hud-extralife-remaining').innerText = remaining;
             let pct = (Game.scoreAccumulatorForExtraLife / Game.extraLifeThreshold) * 100;
             document.getElementById('hud-extralife-bar').style.width = Math.min(100, pct) + '%';
+            updateCombatHUD();
+            updateBossHUD();
         }
 
         function formatTime(sec) {
@@ -3163,6 +3247,14 @@
                 const pct = Math.min(100, Math.round((Game.plateCharge / 1.5) * 100));
                 text.textContent = 'Mecanismo cooperativo · ocupen una placa cada uno · ' + pct + '%';
                 fill.style.width = pct + '%';
+                return;
+            }
+
+            if (Game.level === Combat.combatRules.boss.level && !Game.bossDefeated) {
+                const hp = Game.boss ? Math.max(0, Math.round(Game.boss.hp)) : 0;
+                const maxHp = Game.boss ? Game.boss.maxHp : Combat.combatRules.boss.hp;
+                text.textContent = 'Portal sellado · derrota al Guardián · ' + hp + '/' + maxHp + ' HP';
+                fill.style.width = Math.max(0, Math.min(100, hp / maxHp * 100)) + '%';
                 return;
             }
 
@@ -3406,16 +3498,40 @@
                 for(let j = Game.enemies.length - 1; j >= 0; j--) {
                     let enemy = Game.enemies[j];
                     let dist = arrow.mesh.position.distanceTo(enemy.mesh.position);
-                    if(dist < 1.2) {
-                        scene.remove(enemy.mesh);
-                        mazeGroup.remove(enemy.mesh);
-                        Game.enemies.splice(j, 1);
+                    if(dist < (enemy.isBoss ? 1.8 : 1.2)) {
                         hitEnemy = true;
                         AudioEngine.playHit();
-                        
-                        // CÁLCULO DE PUNTAJE SOLICITADO: 250 PTS BASE + 50 PTS ADICIONALES POR NIVEL ALCANZADO
-                        let enemyKilledPoints = 250 + ((Game.level - 1) * 50);
-                        addScore(enemyKilledPoints);
+
+                        if (enemy.isBoss && !isBossVulnerable()) {
+                            updateBossHUD();
+                            break;
+                        }
+
+                        enemy.hp = Math.max(0, enemy.hp - Combat.combatRules.bulletDamage);
+                        if (enemy.isBoss && enemy.hp <= enemy.maxHp * 0.5) {
+                            enemy.mesh.traverse(obj => {
+                                if (obj.isMesh && obj.material && 'emissiveIntensity' in obj.material) {
+                                    obj.material.emissiveIntensity = Math.max(obj.material.emissiveIntensity || 0, 0.55);
+                                }
+                            });
+                        }
+
+                        if (enemy.hp <= 0) {
+                            scene.remove(enemy.mesh);
+                            mazeGroup.remove(enemy.mesh);
+                            Game.enemies.splice(j, 1);
+
+                            if (enemy.isBoss) {
+                                Game.bossDefeated = true;
+                                Game.boss = null;
+                                addScore(Combat.combatRules.boss.score);
+                                Net.status('Guardián del Desierto derrotado · portal desbloqueado.');
+                            } else {
+                                let enemyKilledPoints = 250 + ((Game.level - 1) * 50);
+                                addScore(enemyKilledPoints);
+                            }
+                        }
+                        updateBossHUD();
                         break;
                     }
                 }
@@ -3436,24 +3552,39 @@
                         enemy.mesh.position.distanceTo(Net.remote.position) < enemy.mesh.position.distanceTo(playerMesh.position)) target = Net.remote;
                 }
                 let dirVec = new THREE.Vector3().subVectors(target.position, enemy.mesh.position);
-                dirVec.y = 0; 
+                dirVec.y = 0;
                 let distanceToPlayer = dirVec.length();
                 dirVec.normalize();
 
-                enemy.mesh.position.addScaledVector(dirVec, enemy.speed * delta);
+                enemy.attackTimer = Math.max(0, (enemy.attackTimer || 0) - delta);
+                let moveDir = dirVec.clone();
+                let speedMultiplier = 1;
+
+                if (enemy.role === 'sprinter' && distanceToPlayer < 7) speedMultiplier = 1.5;
+                else if (enemy.role === 'ambusher' && distanceToPlayer < 9) speedMultiplier = 1.28;
+                else if (enemy.role === 'tank') speedMultiplier = 0.92;
+                else if (enemy.role?.includes('ranged')) {
+                    if (distanceToPlayer < 5) moveDir.negate();
+                    else if (distanceToPlayer < 9) speedMultiplier = 0.18;
+                }
+                if (enemy.isBoss && enemy.hp <= enemy.maxHp * 0.5) speedMultiplier *= 1.38;
+
+                enemy.mesh.position.addScaledVector(moveDir, enemy.speed * speedMultiplier * delta);
                 enemy.mesh.lookAt(target.position.x, target.position.y, target.position.z);
 
-                if(distanceToPlayer < 1.05) {
+                const meleeRange = enemy.isBoss ? 1.7 : 1.05;
+                if(distanceToPlayer < meleeRange && enemy.attackTimer <= 0) {
                     Net.hitTarget = target;
-                    handlePlayerDeath();
-                    break;
+                    const rageBonus = enemy.isBoss && enemy.hp <= enemy.maxHp * 0.5 ? 8 : 0;
+                    handlePlayerDeath((enemy.damage || 28) + rageBonus);
+                    enemy.attackTimer = enemy.attackCooldown || 1.1;
                 }
 
-                // --- NUEVO: enemigos de niveles 7-11 persiguen con línea de visión y disparan a distancia ---
+                // Enemigos a distancia mantienen espacio y atacan al objetivo autoritativo.
                 if (enemy.weapon) {
                     enemy.fireTimer -= delta;
                     if (distanceToPlayer <= enemy.sightRange && enemy.fireTimer <= 0) {
-                        fireEnemyProjectile(enemy);
+                        fireEnemyProjectile(enemy, target);
                         enemy.fireTimer = enemy.fireCooldown;
                     }
                 }
@@ -3486,7 +3617,7 @@
                     scene.remove(proj.mesh);
                     Game.enemyProjectiles.splice(i, 1);
                     Net.hitTarget = distToGuest < distToPlayer ? Net.remote : playerMesh;
-                    handlePlayerDeath(); // misma función de daño existente, no afecta rifle ni balas del jugador
+                    handlePlayerDeath(proj.damage || 24);
                     if (Game.gameOver) break;
                     continue;
                 }
@@ -3512,7 +3643,7 @@
                     let raised = cycle > 0.3;
                     trap.mesh.position.y = raised ? 0.32 : -0.35;
                     if (raised && distToPlayer < trap.radius && trap.cooldown <= 0) {
-                        handlePlayerDeath(); trap.cooldown = 1.2;
+                        handlePlayerDeath(32); trap.cooldown = 1.2;
                     }
                 } else if (trap.type === 'pendulo') {
                     trap.pivot.rotation.z = Math.sin(trap.phase * 1.1) * 1.1;
@@ -3522,14 +3653,14 @@
                     Math.hypot(playerMesh.position.x - bladeWorldPos.x, playerMesh.position.z - bladeWorldPos.z),
                     Net.remote ? Math.hypot(Net.remote.position.x - bladeWorldPos.x, Net.remote.position.z - bladeWorldPos.z) : Infinity
                 );
-                    if (bladeDist < 0.8 && trap.cooldown <= 0) { handlePlayerDeath(); trap.cooldown = 1.2; }
+                    if (bladeDist < 0.8 && trap.cooldown <= 0) { handlePlayerDeath(36); trap.cooldown = 1.2; }
                 } else if (trap.type === 'geiser') {
                     let active = Math.sin(trap.phase * 1.6) > 0.2;
                     trap.flame.visible = active;
                     trap.light.intensity = active ? 1.0 : 0;
-                    if (active && distToPlayer < trap.radius && trap.cooldown <= 0) { handlePlayerDeath(); trap.cooldown = 1.2; }
+                    if (active && distToPlayer < trap.radius && trap.cooldown <= 0) { handlePlayerDeath(28); trap.cooldown = 1.2; }
                 } else if (trap.type === 'makibishi') {
-                    if (distToPlayer < trap.radius && trap.cooldown <= 0) { handlePlayerDeath(); trap.cooldown = 1.2; }
+                    if (distToPlayer < trap.radius && trap.cooldown <= 0) { handlePlayerDeath(20); trap.cooldown = 1.2; }
                 } else if (trap.type === 'columna') {
                     let falling = (Math.sin(trap.phase * 0.5) > 0.6);
                     if (falling) {
@@ -3538,7 +3669,7 @@
                         trap.column.rotation.z = 0;
                     }
                     if (falling && trap.column.rotation.z > 0.9 && distToPlayer < trap.radius + 0.5 && trap.cooldown <= 0) {
-                        handlePlayerDeath(); trap.cooldown = 1.5;
+                        handlePlayerDeath(42); trap.cooldown = 1.5;
                     }
                 }
             }
@@ -3563,11 +3694,34 @@
                 }
             }
 
+            // Botiquines: el anfitrión/solo decide quién los recoge y cura.
+            for (let i = Game.medkits.length - 1; i >= 0; i--) {
+                const medkit = Game.medkits[i];
+                medkit.mesh.rotation.y += delta * 0.9;
+                medkit.mesh.position.y = Math.sin(Game.animTimer * 2 + i) * 0.08;
+
+                const localRole = Net.role === 'solo' ? 'solo' : 'host';
+                const localDown = Net.role === 'host' && Game.coopDowned.host;
+                const guestDown = Net.role === 'host' && Game.coopDowned.guest;
+                const localDist = localDown ? Infinity : playerMesh.position.distanceTo(medkit.mesh.position);
+                const guestDist = Net.remote && !guestDown ? Net.remote.position.distanceTo(medkit.mesh.position) : Infinity;
+                const collector = guestDist < localDist ? 'guest' : localRole;
+                const dist = Math.min(localDist, guestDist);
+
+                if (dist < 1.15 && (Game.health[collector] ?? Game.maxHealth) < Game.maxHealth) {
+                    if (healRole(collector, Combat.combatRules.medkitHeal)) {
+                        mazeGroup.remove(medkit.mesh);
+                        Game.medkits.splice(i, 1);
+                    }
+                }
+            }
+
             if (Net.role === 'host') {
                 updateReviveSystem(delta);
                 updateCoopPlates(delta);
             }
             syncCoopPlateVisuals();
+            updateBossHUD();
 
             // Verificación de Transición de Nivel (Llegada a la meta)
             let pGridX = Math.floor((playerMesh.position.x + Game.cellSize/2) / Game.cellSize);
@@ -3577,14 +3731,16 @@
             let localAtGoal = pGridX === Game.gridSize - 2 && pGridZ === Game.gridSize - 2;
 
             if (Net.role === 'solo') {
-                if (localAtGoal) {
+                const soloPortalUnlocked = Game.level !== Combat.combatRules.boss.level || Game.bossDefeated;
+                if (localAtGoal && soloPortalUnlocked) {
                     Game.level++;
                     Game.portalCharge = 0;
                     startNewLevel();
                 }
             } else if (Net.role === 'host') {
                 Game.portalStatus = { hostAtGoal: localAtGoal, guestAtGoal: remoteAtGoal };
-                const portalUnlocked = Game.level < 2 || Game.platesUnlocked;
+                const bossUnlocked = Game.level !== Combat.combatRules.boss.level || Game.bossDefeated;
+                const portalUnlocked = (Game.level < 2 || Game.platesUnlocked) && bossUnlocked;
                 if (portalUnlocked && localAtGoal && remoteAtGoal && !Game.coopDowned.host && !Game.coopDowned.guest) Game.portalCharge += delta;
                 else Game.portalCharge = 0;
                 updateCoopObjective(localAtGoal, remoteAtGoal, Game.portalCharge);
@@ -3666,6 +3822,10 @@
             Game.scoreAccumulatorForExtraLife = 0;
             Game.portalCharge = 0;
             Game.portalStatus = { hostAtGoal: false, guestAtGoal: false };
+            Game.health = { solo: Game.maxHealth, host: Game.maxHealth, guest: Game.maxHealth };
+            Game.medkits = [];
+            Game.boss = null;
+            Game.bossDefeated = false;
             Game.coopPlates = [];
             Game.platesUnlocked = false;
             Game.plateCharge = 0;
