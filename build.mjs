@@ -10,6 +10,8 @@ for (const name of ['index.html']) fs.copyFileSync(path.join(root, name), path.j
 fs.copyFileSync(path.join(root, 'node_modules/three/build/three.min.js'), path.join(dist, 'three.min.js'));
 await build({ entryPoints: [path.join(root, 'src/supabase-client.js')], bundle: true, minify: true,
   format: 'iife', platform: 'browser', outfile: path.join(dist, 'supabase-client.js') });
+await build({ entryPoints: [path.join(root, 'src/combat-config.js')], bundle: true, minify: true,
+  format: 'iife', platform: 'browser', outfile: path.join(dist, 'combat-config.js') });
 const defaults = JSON.parse(fs.readFileSync(path.join(root, 'supabase.public.json'), 'utf8'));
 const config = {
   url: process.env.SUPABASE_URL || defaults.url,
