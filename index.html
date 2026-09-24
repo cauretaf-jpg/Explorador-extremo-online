@@ -256,6 +256,119 @@
             transform: translate(-50%, 0px);
         }
 
+        /* --- V12: lobby cooperativo y objetivo compartido --- */
+        #coop-menu input, #player-name {
+            padding: 12px 14px;
+            border-radius: 10px;
+            border: 1px solid rgba(255,255,255,0.28);
+            background: rgba(0,0,0,0.48);
+            color: #fff;
+            font-size: 1rem;
+            outline: none;
+        }
+        #coop-menu input:focus, #player-name:focus {
+            border-color: #00ffcc;
+            box-shadow: 0 0 0 2px rgba(0,255,204,0.16);
+        }
+        #online-entry {
+            width: min(620px, 92vw);
+            margin: 14px auto 0;
+            padding: 14px;
+            border: 1px solid rgba(0,255,204,0.25);
+            border-radius: 14px;
+            background: rgba(0,0,0,0.28);
+        }
+        #coop-menu {
+            margin: 10px auto 0;
+            display: flex;
+            gap: 8px;
+            justify-content: center;
+            flex-wrap: wrap;
+        }
+        #lobby-panel {
+            display: none;
+            width: min(620px, 92vw);
+            margin: 12px auto 0;
+            padding: 15px 18px;
+            border-radius: 14px;
+            border: 1px solid rgba(255,215,0,0.35);
+            background: rgba(8,16,14,0.8);
+            text-align: left;
+        }
+        .lobby-title {
+            color: #ffd700;
+            font-weight: 800;
+            text-align: center;
+            font-size: 1.15rem;
+            margin-bottom: 10px;
+        }
+        .lobby-row {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            gap: 12px;
+            padding: 8px 10px;
+            margin: 6px 0;
+            border-radius: 9px;
+            background: rgba(255,255,255,0.06);
+        }
+        .ready-state { color: #aaa; font-weight: 800; }
+        .ready-state.ready { color: #00ff99; }
+        #lobby-actions {
+            display: flex;
+            flex-wrap: wrap;
+            justify-content: center;
+            gap: 8px;
+            margin-top: 12px;
+        }
+        #lobby-actions .btn {
+            padding: 10px 18px;
+            font-size: 0.94rem;
+        }
+        #btn-online-start:disabled {
+            opacity: 0.42;
+            cursor: not-allowed;
+            transform: none;
+        }
+        #coop-objective {
+            position: absolute;
+            left: 50%;
+            bottom: 18px;
+            transform: translateX(-50%);
+            z-index: 72;
+            min-width: 280px;
+            max-width: 88vw;
+            padding: 10px 16px;
+            border-radius: 12px;
+            border: 1px solid rgba(0,255,204,0.5);
+            background: rgba(5,18,16,0.88);
+            color: #fff;
+            text-align: center;
+            font-weight: 800;
+            display: none;
+            pointer-events: none;
+        }
+        #portal-charge-track {
+            height: 6px;
+            margin-top: 7px;
+            overflow: hidden;
+            border-radius: 5px;
+            background: rgba(255,255,255,0.14);
+        }
+        #portal-charge-fill {
+            height: 100%;
+            width: 0%;
+            background: linear-gradient(90deg, #00ffcc, #ffd700);
+            transition: width 0.08s linear;
+        }
+        @media (max-width: 700px) {
+            h1 { font-size: 2.45rem; }
+            .btn { padding: 12px 22px; font-size: 1rem; }
+            .instructions { max-width: 92vw; font-size: 0.82rem; }
+            #hud { font-size: 0.82rem; gap: 6px; }
+            .hud-panel { padding: 7px 10px; }
+        }
+
         #victory-screen {
             background: radial-gradient(circle, rgba(40,32,4,0.95) 0%, rgba(10,8,1,0.99) 100%);
             display: none;
@@ -285,6 +398,10 @@
 
     <div id="canvas-container"></div>
     <div id="online-status" style="position:absolute;bottom:12px;left:12px;z-index:70;color:#00ffcc;background:#101820dd;padding:8px 12px;border-radius:8px;display:none"></div>
+    <div id="coop-objective">
+        <div id="coop-objective-text">Portal cooperativo: 0/2 exploradores</div>
+        <div id="portal-charge-track"><div id="portal-charge-fill"></div></div>
+    </div>
 
     <div id="level-cinematic-banner">
         <div id="level-cinematic-title">Nivel 1</div>
@@ -306,14 +423,35 @@
     <div id="menu-screen" class="overlay">
         <h1>Explorador Extremo 3D</h1>
         <div class="author-tag">Autor del Juego: Profesor Juan Neira</div>
-        <div class="subtitle">Aventuras en Laberintos 3D Dinámicos</div>
+        <div class="subtitle">V12 · Expedición cooperativa online</div>
         <button class="btn" id="btn-start">Jugar solo</button>
-        <div id="coop-menu" style="margin:16px auto;display:flex;gap:8px;justify-content:center;flex-wrap:wrap;max-width:460px">
-            <button class="btn" id="btn-create">Crear sala cooperativa</button>
-            <input id="room-code" inputmode="numeric" maxlength="6" placeholder="Código de 6 dígitos" aria-label="Código de sala" style="padding:10px;border-radius:8px;width:160px">
-            <button class="btn" id="btn-join">Unirse</button>
+
+        <div id="online-entry">
+            <input id="player-name" maxlength="18" autocomplete="nickname" placeholder="Tu nombre de explorador" aria-label="Nombre del jugador" style="width:min(320px,90%);display:block;margin:0 auto 8px">
+            <div id="coop-menu">
+                <button class="btn" id="btn-create">Crear sala</button>
+                <input id="room-code" inputmode="numeric" maxlength="6" placeholder="Código de 6 dígitos" aria-label="Código de sala" style="width:170px">
+                <button class="btn" id="btn-join">Unirse</button>
+            </div>
+            <div id="room-status" role="status" style="color:#00ffcc;margin:10px 4px 0;font-weight:bold;text-align:center"></div>
         </div>
-        <div id="room-status" role="status" style="color:#00ffcc;margin:8px;font-weight:bold"></div>
+
+        <div id="lobby-panel" aria-live="polite">
+            <div class="lobby-title">Sala <span id="lobby-code">------</span></div>
+            <div class="lobby-row">
+                <span>🧭 <span id="lobby-host-name">Anfitrión</span></span>
+                <span id="lobby-host-ready" class="ready-state">ESPERANDO</span>
+            </div>
+            <div class="lobby-row">
+                <span>🎒 <span id="lobby-guest-name">Esperando jugador…</span></span>
+                <span id="lobby-guest-ready" class="ready-state">ESPERANDO</span>
+            </div>
+            <div id="lobby-actions">
+                <button class="btn" id="btn-ready">Estoy listo</button>
+                <button class="btn" id="btn-copy-invite">Copiar invitación</button>
+                <button class="btn" id="btn-online-start" disabled>Iniciar expedición</button>
+            </div>
+        </div>
         <div class="instructions">
             <strong>CONTROLES DE EXPEDICIÓN:</strong><br>
             • Mover Explorador: <strong>Flechas del Teclado (Adaptado a la cámara)</strong><br>
@@ -858,6 +996,7 @@
         const Net = {
             role: 'solo', channel: null, code: null, state: null, remote: null,
             frame: 0, poseTimer: 0, hitTarget: null, starting: false, peerConnected: false, tracked: false, subscribed: false,
+            name: '', ready: false, presenceKey: null, hostInfo: null, guestInfo: null, guestProbeTimer: null,
             send(message) {
                 if (this.channel) this.channel.send({ type: 'broadcast', event: 'game', payload: message })
                     .then(result => { if (result !== 'ok') console.warn('No se pudo enviar mensaje:', result); });
@@ -868,11 +1007,85 @@
                 online.textContent = message; online.style.display = this.role === 'solo' ? 'none' : 'block';
             },
             connect(action, code) {
+                const rawName = document.getElementById('player-name').value.trim();
+                if (rawName.length < 2) {
+                    this.status('Escribe un nombre de explorador de al menos 2 caracteres.');
+                    document.getElementById('player-name').focus();
+                    return;
+                }
+                this.name = rawName.slice(0, 18);
+                localStorage.setItem('explorador-player-name', this.name);
                 this.status('Conectando a la sala…');
                 this.connectRoom(action, code).catch(error => {
                     console.error('Error al crear o unirse a la sala:', error);
-                    this.status('No se pudo conectar. Abre el enlace en Chrome o Edge y vuelve a intentarlo.');
+                    this.status('No se pudo conectar. Revisa tu conexión y vuelve a intentarlo.');
                 });
+            },
+            presencePayload() {
+                return {
+                    role: this.role,
+                    name: this.name,
+                    ready: this.ready,
+                    clientId: this.presenceKey,
+                    joinedAt: Date.now()
+                };
+            },
+            async trackSelf() {
+                if (!this.channel || this.tracked) return;
+                this.tracked = true;
+                const result = await this.channel.track(this.presencePayload());
+                if (result !== 'ok') throw new Error('Presence track: ' + result);
+            },
+            async refreshPresence() {
+                if (!this.channel || !this.tracked) return;
+                const result = await this.channel.track(this.presencePayload());
+                if (result !== 'ok') console.warn('No se pudo actualizar Presence:', result);
+            },
+            setReady() {
+                if (this.role === 'solo' || !this.tracked) return;
+                this.ready = !this.ready;
+                this.refreshPresence().catch(console.error);
+                this.updateLobby();
+            },
+            canHostStart() {
+                return this.role === 'host' && !!this.hostInfo?.ready && !!this.guestInfo?.ready && this.peerConnected;
+            },
+            updateLobby(participants) {
+                if (this.role === 'solo') return;
+                const all = participants || (this.channel ? Object.values(this.channel.presenceState()).flat() : []);
+                this.hostInfo = all.find(p => p.role === 'host') || this.hostInfo;
+                this.guestInfo = all.find(p => p.role === 'guest') || null;
+                document.getElementById('lobby-panel').style.display = 'block';
+                document.getElementById('lobby-code').textContent = this.code || '------';
+                document.getElementById('lobby-host-name').textContent = this.hostInfo?.name || (this.role === 'host' ? this.name : 'Anfitrión');
+                document.getElementById('lobby-guest-name').textContent = this.guestInfo?.name || (this.role === 'guest' ? this.name : 'Esperando jugador…');
+
+                const hostReady = document.getElementById('lobby-host-ready');
+                const guestReady = document.getElementById('lobby-guest-ready');
+                hostReady.textContent = this.hostInfo?.ready ? 'LISTO' : (this.hostInfo ? 'NO LISTO' : 'ESPERANDO');
+                guestReady.textContent = this.guestInfo?.ready ? 'LISTO' : (this.guestInfo ? 'NO LISTO' : 'ESPERANDO');
+                hostReady.classList.toggle('ready', !!this.hostInfo?.ready);
+                guestReady.classList.toggle('ready', !!this.guestInfo?.ready);
+
+                const readyBtn = document.getElementById('btn-ready');
+                readyBtn.textContent = this.ready ? 'Cancelar listo' : 'Estoy listo';
+                const startBtn = document.getElementById('btn-online-start');
+                startBtn.style.display = this.role === 'host' ? 'inline-block' : 'none';
+                startBtn.disabled = !this.canHostStart();
+
+                const url = new URL(location.href);
+                url.searchParams.set('sala', this.code);
+                history.replaceState(null, '', url);
+            },
+            copyInvite() {
+                if (!this.code) return;
+                const url = new URL(location.href);
+                url.search = '';
+                url.searchParams.set('sala', this.code);
+                navigator.clipboard?.writeText(url.toString()).then(
+                    () => this.status('Invitación copiada. Envíala al segundo explorador.'),
+                    () => this.status('Sala ' + this.code + ' · comparte este código con el segundo explorador.')
+                );
             },
             async connectRoom(action, code) {
                 const cfg = window.EXPLORADOR_CONFIG;
@@ -883,9 +1096,11 @@
                 this.code = action === 'create' ? String(crypto.getRandomValues(new Uint32Array(1))[0] % 900000 + 100000) : String(code);
                 if (!/^\d{6}$/.test(this.code)) { this.role = 'solo'; return this.status('Escribe un código de seis dígitos.'); }
                 this.peerConnected = false; this.tracked = false; this.subscribed = false;
-                const presenceKey = Array.from(crypto.getRandomValues(new Uint8Array(16)), byte => byte.toString(16).padStart(2, '0')).join('');
+                this.ready = false; this.hostInfo = null; this.guestInfo = null;
+                clearTimeout(this.guestProbeTimer);
+                this.presenceKey = Array.from(crypto.getRandomValues(new Uint8Array(16)), byte => byte.toString(16).padStart(2, '0')).join('');
                 this.channel = this.client.channel('explorador:' + this.code, {
-                    config: { broadcast: { self: false }, presence: { key: presenceKey } }
+                    config: { broadcast: { self: false }, presence: { key: this.presenceKey } }
                 });
                 this.channel
                     .on('broadcast', { event: 'game' }, ({ payload }) => this.handleMessage(payload))
@@ -894,18 +1109,23 @@
                         clearTimeout(this.connectTimer);
                         if (status === 'SUBSCRIBED') {
                             this.subscribed = true;
-                            if (this.role === 'host') {
-                                try {
-                                    this.tracked = true;
-                                    await this.channel.track({ role: 'host' });
-                                    this.status('Sala ' + this.code + ' · comparte este código y espera al otro jugador.');
-                                } catch (error) {
-                                    console.error('Error de presencia:', error);
-                                    this.status('No se pudo crear la sala. Vuelve a intentarlo en Chrome o Edge.');
+                            try {
+                                if (this.role === 'host') {
+                                    await this.trackSelf();
+                                    this.status('Sala ' + this.code + ' creada · comparte la invitación y espera al segundo explorador.');
+                                    this.updateLobby();
+                                } else {
+                                    this.status('Buscando al anfitrión de la sala ' + this.code + '…');
+                                    this.guestProbeTimer = setTimeout(() => this.syncPresence().catch(console.error), 350);
                                 }
+                            } catch (error) {
+                                console.error('Error de presencia:', error);
+                                this.status('No se pudo registrar al jugador en la sala. Vuelve a intentarlo.');
                             }
                         } else if (status === 'CHANNEL_ERROR' || status === 'TIMED_OUT') {
-                            this.status('No se pudo conectar al servidor de salas. Abre el enlace en Chrome o Edge.');
+                            this.status('No se pudo conectar al servidor de salas. Revisa tu conexión y vuelve a intentarlo.');
+                        } else if (status === 'CLOSED' && this.role !== 'solo') {
+                            this.status('La conexión con la sala se cerró. Supabase intentará reconectar automáticamente.');
                         }
                     });
                 this.connectTimer = setTimeout(() => {
@@ -914,42 +1134,54 @@
             },
             async syncPresence() {
                 if (!this.channel || !this.subscribed || this.role === 'solo') return;
-                const participants = Object.values(this.channel.presenceState()).flat();
-                const hosts = participants.filter(p => p.role === 'host');
-                const guests = participants.filter(p => p.role === 'guest');
+                let participants = Object.values(this.channel.presenceState()).flat();
+                let hosts = participants.filter(p => p.role === 'host');
+                let guests = participants.filter(p => p.role === 'guest');
+
                 if (!this.tracked && this.role === 'guest') {
-                    if (!hosts.length || guests.length) {
-                        this.status(!hosts.length ? 'No hay anfitrión en esa sala.' : 'La sala ya tiene dos jugadores.');
-                        const oldChannel = this.channel;
-                        this.channel = null; this.role = 'solo';
-                        await this.client.removeChannel(oldChannel);
+                    if (!hosts.length) {
+                        this.status('Aún no aparece el anfitrión. Verificando sala…');
+                        clearTimeout(this.guestProbeTimer);
+                        this.guestProbeTimer = setTimeout(() => this.syncPresence().catch(console.error), 700);
                         return;
                     }
-                    this.tracked = true; await this.channel.track({ role: 'guest' });
-                    this.status('Sala ' + this.code + ' · esperando al anfitrión.');
-                    this.send({ type: 'hello' });
+                    if (guests.length) {
+                        this.status('La sala ya tiene dos jugadores.');
+                        return;
+                    }
+                    await this.trackSelf();
+                    this.send({ type: 'hello', name: this.name });
+                    this.status('Conectado a sala ' + this.code + ' · marca “Estoy listo”.');
                     return;
                 }
+
+                participants = Object.values(this.channel.presenceState()).flat();
+                hosts = participants.filter(p => p.role === 'host');
+                guests = participants.filter(p => p.role === 'guest');
+                this.hostInfo = hosts[0] || null;
+                this.guestInfo = guests[0] || null;
+                this.updateLobby(participants);
+
                 if (this.role === 'host' && hosts.length > 1) {
-                    this.status('El código ya está en uso. Crea otra sala.');
-                    const oldChannel = this.channel;
-                    this.channel = null; this.role = 'solo';
-                    await this.client.removeChannel(oldChannel);
+                    this.status('El código ya está en uso por otro anfitrión. Crea otra sala.');
                     return;
                 }
-                if (this.role === 'host' && guests.length === 1 && !this.peerConnected) {
-                    this.peerConnected = true;
-                    this.status('Sala ' + this.code + ' · invitado conectado. ¡Comienza la partida!');
+                if (this.role === 'host' && guests.length >= 1) {
+                    if (!this.peerConnected) {
+                        this.peerConnected = true;
+                        this.status('Segundo explorador conectado · ambos deben marcar LISTO.');
+                    }
                     this.makeRemote();
-                    if (!Game.isReady) document.getElementById('btn-start').click();
-                    else { this.send({ type: 'start' }); this.frame = 1; this.sendState(0); }
                 } else if (this.role === 'host' && !guests.length) {
                     this.peerConnected = false;
-                    if (this.remote) { this.remote.removeFromParent(); this.remote = null; }
-                    this.status('Sala ' + this.code + ' · esperando al otro jugador.');
+                    this.guestInfo = null;
+                    if (this.remote && !Game.isReady) { this.remote.removeFromParent(); this.remote = null; }
+                    this.status('Sala ' + this.code + ' · esperando al segundo explorador.');
                 } else if (this.role === 'guest' && this.tracked && !hosts.length) {
-                    this.status('El anfitrión se desconectó. Recarga para crear otra sala.');
-                    this.role = 'solo';
+                    this.status('El anfitrión se desconectó. La partida quedó pausada.');
+                } else if (this.role === 'guest' && this.tracked) {
+                    this.peerConnected = true;
+                    this.status('Conectado a sala ' + this.code + ' · ambos deben marcar LISTO.');
                 }
             },
             handleMessage(msg) {
@@ -1005,7 +1237,10 @@
                     player: { x: playerMesh.position.x, z: playerMesh.position.z, angle: playerMesh.rotation.y },
                     guest: this.remote ? { x: this.remote.position.x, z: this.remote.position.z } : null,
                     score: Game.score, lives: Game.lives, time: Game.time,
-                    progress: Game.scoreAccumulatorForExtraLife, gameOver: Game.gameOver
+                    progress: Game.scoreAccumulatorForExtraLife,
+                    portalCharge: Game.portalCharge,
+                    portalStatus: Game.portalStatus,
+                    gameOver: Game.gameOver
                 }});
             },
             applyState(state) {
@@ -1032,7 +1267,14 @@
                 }
                 Game.score = state.score; Game.lives = state.lives; Game.time = state.time;
                 Game.scoreAccumulatorForExtraLife = state.progress;
+                Game.portalCharge = state.portalCharge || 0;
+                Game.portalStatus = state.portalStatus || { hostAtGoal: false, guestAtGoal: false };
                 updateHUD();
+                updateCoopObjective(
+                    !!Game.portalStatus.guestAtGoal,
+                    !!Game.portalStatus.hostAtGoal,
+                    Game.portalCharge
+                );
                 document.getElementById('hud-time').textContent = formatTime(state.time);
                 for (let i = Game.prizes.length - 1; i >= 0; i--) {
                     const p = Game.prizes[i];
@@ -1070,6 +1312,21 @@
         };
         document.getElementById('btn-create').onclick = () => Net.connect('create');
         document.getElementById('btn-join').onclick = () => Net.connect('join', document.getElementById('room-code').value.trim());
+        document.getElementById('btn-ready').onclick = () => Net.setReady();
+        document.getElementById('btn-copy-invite').onclick = () => Net.copyInvite();
+        document.getElementById('btn-online-start').onclick = () => {
+            if (!Net.canHostStart()) return;
+            Net.status('Iniciando expedición cooperativa…');
+            document.getElementById('btn-start').click();
+        };
+
+        const rememberedName = localStorage.getItem('explorador-player-name');
+        if (rememberedName) document.getElementById('player-name').value = rememberedName;
+        const invitedRoom = new URLSearchParams(location.search).get('sala');
+        if (/^\d{6}$/.test(invitedRoom || '')) {
+            document.getElementById('room-code').value = invitedRoom;
+            document.getElementById('room-status').textContent = 'Invitación detectada · escribe tu nombre y presiona Unirse.';
+        }
 
         // --- ESTADO Y CONFIGURACIÓN GLOBAL ---
         const playerHeight = 1.7; // Altura exacta de la entidad explorador extremo
@@ -1099,6 +1356,8 @@
             animTimer: 0,
             // --- NUEVO: umbral de vida extra ajustado de 20000 a 15000 ---
             extraLifeThreshold: 15000,
+            portalCharge: 0,
+            portalStatus: { hostAtGoal: false, guestAtGoal: false },
             // --- NUEVO: sistemas exclusivos de niveles 7-11 ---
             traps: [],
             enemyProjectiles: [],
@@ -2319,6 +2578,26 @@
             return `${m}:${s}`;
         }
 
+        function updateCoopObjective(localAtGoal = false, remoteAtGoal = false, charge = 0) {
+            const box = document.getElementById('coop-objective');
+            if (Net.role === 'solo' || !Game.isReady) {
+                box.style.display = 'none';
+                return;
+            }
+            box.style.display = 'block';
+            const count = (localAtGoal ? 1 : 0) + (remoteAtGoal ? 1 : 0);
+            const text = document.getElementById('coop-objective-text');
+            const fill = document.getElementById('portal-charge-fill');
+            if (count < 2) {
+                text.textContent = 'Portal cooperativo: ' + count + '/2 exploradores en la salida';
+                fill.style.width = '0%';
+            } else {
+                const pct = Math.min(100, Math.round((charge / 1.5) * 100));
+                text.textContent = 'Sincronizando portal… ' + pct + '%';
+                fill.style.width = pct + '%';
+            }
+        }
+
         function endGame() {
             Game.gameOver = true;
             Game.isReady = false;
@@ -2669,11 +2948,25 @@
             let pGridX = Math.floor((playerMesh.position.x + Game.cellSize/2) / Game.cellSize);
             let pGridZ = Math.floor((playerMesh.position.z + Game.cellSize/2) / Game.cellSize);
 
-            let remoteAtGoal = !Net.remote || (Math.floor((Net.remote.position.x + Game.cellSize/2) / Game.cellSize) === Game.gridSize - 2 && Math.floor((Net.remote.position.z + Game.cellSize/2) / Game.cellSize) === Game.gridSize - 2);
+            let remoteAtGoal = !!Net.remote && (Math.floor((Net.remote.position.x + Game.cellSize/2) / Game.cellSize) === Game.gridSize - 2 && Math.floor((Net.remote.position.z + Game.cellSize/2) / Game.cellSize) === Game.gridSize - 2);
             let localAtGoal = pGridX === Game.gridSize - 2 && pGridZ === Game.gridSize - 2;
-            if ((localAtGoal || (Net.remote && remoteAtGoal)) && (!Net.remote || (localAtGoal && remoteAtGoal))) {
-                Game.level++;
-                startNewLevel();
+
+            if (Net.role === 'solo') {
+                if (localAtGoal) {
+                    Game.level++;
+                    Game.portalCharge = 0;
+                    startNewLevel();
+                }
+            } else if (Net.role === 'host') {
+                Game.portalStatus = { hostAtGoal: localAtGoal, guestAtGoal: remoteAtGoal };
+                if (localAtGoal && remoteAtGoal) Game.portalCharge += delta;
+                else Game.portalCharge = 0;
+                updateCoopObjective(localAtGoal, remoteAtGoal, Game.portalCharge);
+                if (Game.portalCharge >= 1.5) {
+                    Game.portalCharge = 0;
+                    Game.level++;
+                    startNewLevel();
+                }
             }
 
             if (Net.role === 'host') Net.sendState(delta);
@@ -2726,6 +3019,9 @@
             Game.clock.start();
             if (Net.role === 'host') Net.makeRemote();
             if (Net.role === 'guest') Net.readyLevel = Game.level;
+            document.getElementById('lobby-panel').style.display = 'none';
+            document.getElementById('online-entry').style.display = 'none';
+            updateCoopObjective(false, false, 0);
             
             if (!animationStarted) {
                 animate();
@@ -2740,6 +3036,8 @@
             Game.time = 0;
             Game.survivalTimer = 0;
             Game.scoreAccumulatorForExtraLife = 0;
+            Game.portalCharge = 0;
+            Game.portalStatus = { hostAtGoal: false, guestAtGoal: false };
             Game.gameOver = false;
             Game.traps = [];
             Game.enemyProjectiles = [];
