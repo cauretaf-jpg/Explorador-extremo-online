@@ -1,6 +1,11 @@
-# Explorador Extremo V12 · cooperativo online
+# Explorador Extremo V12.1 · cooperativo online
 
 Copia independiente del juego del profesor Juan Neira (crédito conservado en pantalla). La V12 mantiene el modo individual y refuerza el cooperativo de dos jugadores usando Supabase Realtime.
+
+## Novedades V12.1
+
+- Movimiento con **WASD o flechas del teclado**.
+- Prevención de teclas “pegadas” al cambiar de pestaña.
 
 ## Novedades V12
 
