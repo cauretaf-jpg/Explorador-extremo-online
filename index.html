@@ -3278,8 +3278,8 @@
                     }
                 }
 
-                let distToPlayer = proj.mesh.position.distanceTo(playerMesh.position);
-                let distToGuest = Net.remote ? proj.mesh.position.distanceTo(Net.remote.position) : Infinity;
+                let distToPlayer = Game.coopDowned.host ? Infinity : proj.mesh.position.distanceTo(playerMesh.position);
+                let distToGuest = Net.remote && !Game.coopDowned.guest ? proj.mesh.position.distanceTo(Net.remote.position) : Infinity;
                 let hitPlayer = Math.min(distToPlayer, distToGuest) < 0.9;
 
                 if (hitPlayer && !Game.gameOver) {
@@ -3302,8 +3302,8 @@
                 if (Game.gameOver) break;
                 trap.phase += delta;
                 if (trap.cooldown > 0) trap.cooldown -= delta;
-                let localTrapDist = Math.hypot(playerMesh.position.x - trap.x, playerMesh.position.z - trap.z);
-                let guestTrapDist = Net.remote ? Math.hypot(Net.remote.position.x - trap.x, Net.remote.position.z - trap.z) : Infinity;
+                let localTrapDist = Game.coopDowned.host ? Infinity : Math.hypot(playerMesh.position.x - trap.x, playerMesh.position.z - trap.z);
+                let guestTrapDist = Net.remote && !Game.coopDowned.guest ? Math.hypot(Net.remote.position.x - trap.x, Net.remote.position.z - trap.z) : Infinity;
                 let distToPlayer = Math.min(localTrapDist, guestTrapDist);
                 Net.hitTarget = guestTrapDist < localTrapDist ? Net.remote : playerMesh;
 
@@ -3352,7 +3352,9 @@
                 prize.mesh.rotation.y += 2 * delta;
                 prize.mesh.position.y = 0.8 + Math.sin(Game.animTimer * 3 + i) * 0.15;
 
-                let dist = Math.min(playerMesh.position.distanceTo(prize.mesh.position), Net.remote ? Net.remote.position.distanceTo(prize.mesh.position) : Infinity);
+                let localPrizeDist = Net.role === 'host' && Game.coopDowned.host ? Infinity : playerMesh.position.distanceTo(prize.mesh.position);
+                let remotePrizeDist = Net.remote && !(Net.role === 'host' && Game.coopDowned.guest) ? Net.remote.position.distanceTo(prize.mesh.position) : Infinity;
+                let dist = Math.min(localPrizeDist, remotePrizeDist);
                 if(dist < 1.1) {
                     AudioEngine.playCoin();
                     addScore(prize.points);
