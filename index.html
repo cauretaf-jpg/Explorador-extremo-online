@@ -566,6 +566,7 @@
             <div id="lobby-actions">
                 <button class="btn" id="btn-ready">Estoy listo</button>
                 <button class="btn" id="btn-copy-invite">Copiar invitación</button>
+                <button class="btn" id="btn-leave-room">Salir de sala</button>
                 <button class="btn" id="btn-online-start" disabled>Iniciar expedición</button>
             </div>
         </div>
@@ -1139,7 +1140,7 @@
             },
             setupReconnectController() {
                 if (!NetworkSession) return;
-                if (this.reconnectController) this.reconnectController.stop();
+                if (this.reconnectController) this.reconnectController.destroy?.();
                 this.reconnectController = NetworkSession.createReconnectController({
                     onReconnect: async () => {
                         if (this.role === 'solo' || !this.code || this.subscribed) return;
@@ -1175,6 +1176,36 @@
                     resumeSession: session
                 });
             },
+            async leaveRoom() {
+                this.intentionalClose = true;
+                this.reconnectController?.destroy?.();
+                this.reconnectController = null;
+                const oldChannel = this.channel;
+                this.channel = null;
+                try {
+                    if (oldChannel && this.client) await this.client.removeChannel(oldChannel);
+                } catch (error) {
+                    console.warn('No se pudo cerrar la sala limpiamente:', error);
+                }
+                this.intentionalClose = false;
+                this.role = 'solo';
+                this.code = null;
+                this.state = null;
+                this.remote = null;
+                this.peerConnected = false;
+                this.tracked = false;
+                this.subscribed = false;
+                this.ready = false;
+                this.hostInfo = null;
+                this.guestInfo = null;
+                NetworkSession?.clearSession?.();
+
+                document.getElementById('lobby-panel').style.display = 'none';
+                document.getElementById('online-entry').style.display = 'block';
+                document.getElementById('room-status').textContent = 'Saliste de la sala. Puedes crear otra o unirte con un código.';
+                document.getElementById('online-status').style.display = 'none';
+                document.getElementById('btn-resume-session').style.display = 'none';
+            },
             uniqueParticipants() {
                 if (!this.channel) return [];
                 const raw = Object.values(this.channel.presenceState()).flat();
@@ -1203,6 +1234,7 @@
                 }
                 this.name = rawName.slice(0, 18);
                 localStorage.setItem('explorador-player-name', this.name);
+                NetworkSession?.clearSession?.();
                 this.status('Conectando a la sala…');
                 this.connectRoom(action, code).catch(error => {
                     console.error('Error al crear o unirse a la sala:', error);
@@ -1242,7 +1274,7 @@
             updateLobby(participants) {
                 if (this.role === 'solo') return;
                 const all = participants || this.uniqueParticipants();
-                this.hostInfo = all.find(p => p.role === 'host') || this.hostInfo;
+                this.hostInfo = all.find(p => p.role === 'host') || null;
                 this.guestInfo = all.find(p => p.role === 'guest') || null;
                 document.getElementById('lobby-panel').style.display = 'block';
                 document.getElementById('lobby-code').textContent = this.code || '------';
@@ -1307,10 +1339,12 @@
                 this.channel = this.client.channel('explorador:' + this.code, {
                     config: { broadcast: { self: false }, presence: { key: this.presenceKey } }
                 });
-                this.channel
+                const activeChannel = this.channel;
+                activeChannel
                     .on('broadcast', { event: 'game' }, ({ payload }) => this.handleMessage(payload))
                     .on('presence', { event: 'sync' }, () => this.syncPresence().catch(error => { console.error(error); this.status('No se pudo sincronizar la sala.'); }))
                     .subscribe(async status => {
+                        if (this.channel !== activeChannel) return;
                         clearTimeout(this.connectTimer);
                         if (status === 'SUBSCRIBED') {
                             this.subscribed = true;
@@ -1624,6 +1658,7 @@
         document.getElementById('btn-join').onclick = () => Net.connect('join', document.getElementById('room-code').value.trim());
         document.getElementById('btn-ready').onclick = () => Net.setReady();
         document.getElementById('btn-copy-invite').onclick = () => Net.copyInvite();
+        document.getElementById('btn-leave-room').onclick = () => Net.leaveRoom();
         document.getElementById('btn-online-start').onclick = () => {
             if (!Net.canHostStart()) return;
             Net.status('Iniciando expedición cooperativa…');
@@ -3031,6 +3066,7 @@
             document.getElementById('victory-score').innerText = Game.score;
             document.getElementById('victory-screen').style.display = 'flex';
             if (Net.role === 'host') { Net.frame = 1; Net.sendState(0); }
+            if (Net.role !== 'solo') Net.persistSession({ inGame:false });
         }
 
         function localCombatRole() {
@@ -3412,6 +3448,7 @@
             document.getElementById('final-score').innerText = Game.score;
             document.getElementById('game-over-screen').style.display = 'flex';
             if (Net.role === 'host') { Net.frame = 1; Net.sendState(0); }
+            if (Net.role !== 'solo') Net.persistSession({ inGame:false });
         }
 
         setInterval(() => {
@@ -3900,6 +3937,7 @@
         // --- INICIALIZACIÓN Y EVENTOS DE UI ---
         document.getElementById('btn-start').addEventListener('click', () => {
             if (Net.starting || Game.isReady) return;
+            if (Net.role === 'solo') NetworkSession?.clearSession?.();
             if (Net.role === 'guest' && !Net.state) return;
             Net.starting = true;
             if (Net.role === 'host') Net.send({ type: 'start' });
