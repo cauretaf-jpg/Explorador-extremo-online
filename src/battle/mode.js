@@ -318,6 +318,8 @@ const BattleMode = (() => {
   }
 
   function openLobby() {
+    root.querySelector('.battle-menu').style.display = 'flex';
+    root.querySelector('.battle-entry-card').style.display = 'none';
     lobbyEl.style.display = 'block';
     gameEl.style.display = 'none';
     resultEl.style.display = 'none';
@@ -429,8 +431,8 @@ const BattleMode = (() => {
   }
 
   function initializeBattle(initialPlayers) {
-    openGame();
     stopGame(false);
+    openGame();
     state = new Map(initialPlayers.map(p => [p.id,{...p}]));
     buildArena();
     meshes.clear();
@@ -450,6 +452,7 @@ const BattleMode = (() => {
   }
 
   function openGame() {
+    root.querySelector('.battle-menu').style.display = 'none';
     lobbyEl.style.display = 'none';
     resultEl.style.display = 'none';
     gameEl.style.display = 'block';
@@ -574,7 +577,7 @@ const BattleMode = (() => {
 
       let victim = null;
       for (const p of state.values()) {
-        if (p.id===shot.owner || !p.alive) continue;
+        if (p.id===shot.owner || !p.alive || p.connected === false) continue;
         if (Math.hypot(p.x-shot.x,p.z-shot.z) < .75) { victim=p; break; }
       }
       if (!victim) continue;
@@ -651,7 +654,7 @@ const BattleMode = (() => {
         mesh.position.z += (raw.z-mesh.position.z)*.32;
         mesh.rotation.y = raw.angle || 0;
       }
-      mesh.visible = raw.alive;
+      mesh.visible = !!raw.alive && raw.connected !== false;
     }
     updateProjectileMeshes(msg.projectiles || []);
     updateBattleHud();
@@ -672,6 +675,7 @@ const BattleMode = (() => {
     if (frameId) cancelAnimationFrame(frameId);
     frameId=null;
     document.body.classList.remove('battle-active');
+    root.querySelector('.battle-menu').style.display='none';
     gameEl.style.display='none';
     resultEl.style.display='flex';
 
@@ -713,7 +717,7 @@ const BattleMode = (() => {
           mesh.position.z += (p.z-mesh.position.z)*.36;
           mesh.rotation.y=p.angle||0;
         }
-        mesh.visible=!!p.alive;
+        mesh.visible=!!p.alive && p.connected !== false;
       }
       updateProjectileMeshes(projectiles);
     }
@@ -952,6 +956,7 @@ const BattleMode = (() => {
     root.classList.add('open');
     root.querySelector('.battle-menu').style.display='flex';
     root.querySelector('.battle-entry-card').style.display='block';
+    lobbyEl.style.display='none';
     lobbyEl.style.display='none';
     gameEl.style.display='none';
     resultEl.style.display='none';
