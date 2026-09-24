@@ -1,6 +1,15 @@
-# Explorador Extremo V12.1 · cooperativo online
+# Explorador Extremo V12.2 · cooperativo online
 
 Copia independiente del juego del profesor Juan Neira (crédito conservado en pantalla). La V12 mantiene el modo individual y refuerza el cooperativo de dos jugadores usando Supabase Realtime.
+
+## Novedades V12.2
+
+- Sistema de **caída y reanimación** en cooperativo.
+- El jugador caído dispone de **12 segundos** antes de consumir una vida.
+- El compañero puede reanimarlo manteniendo **E durante 2 segundos** a corta distancia.
+- Desde el nivel 2 aparecen **dos placas cooperativas**: cada jugador debe ocupar una simultáneamente durante 1,5 segundos para desbloquear el portal.
+- Marcador en pantalla con **nombre, distancia y estado** del compañero.
+- Jugadores caídos dejan de atraer enemigos, recibir daño adicional o recoger premios.
 
 ## Novedades V12.1
 
