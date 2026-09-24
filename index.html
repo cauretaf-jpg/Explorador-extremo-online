@@ -1647,6 +1647,7 @@
             resumeButton.textContent = 'Reanudar sala ' + savedOnlineSession.code;
             resumeButton.onclick = () => {
                 resumeButton.disabled = true;
+                AudioEngine.init();
                 Net.resumeSavedSession(savedOnlineSession).catch(error => {
                     console.error(error);
                     resumeButton.disabled = false;
@@ -1699,6 +1700,7 @@
             medkits: [],
             boss: null,
             bossDefeated: false,
+            restoreLayout: null,
             coopPlates: [],
             platesUnlocked: false,
             plateCharge: 0,
@@ -1996,11 +1998,14 @@
             floor.receiveShadow = true;
             mazeGroup.add(floor);
 
+            const restoredLayout = Array.isArray(Game.restoreLayout) ? Game.restoreLayout : null;
             let coopPlateLayout = [];
             if (Net.role !== 'solo' && Game.level >= 2) {
                 coopPlateLayout = Net.role === 'guest'
                     ? (Net.state?.layout || []).filter(item => item.kind === 'plate')
-                    : chooseCoopPlateLayout();
+                    : restoredLayout
+                        ? restoredLayout.filter(item => item.kind === 'plate')
+                        : chooseCoopPlateLayout();
             }
 
             for(let x=0; x<Game.gridSize; x++) {
@@ -2028,8 +2033,10 @@
 
                         // Mayor densidad de premios en niveles 7-11 (gemas místicas)
                         let prizeChance = Game.level >= 7 ? 0.17 : 0.12;
-                        let layout = Net.role === 'guest' ? Net.state?.layout?.find(item => item.x === posX && item.z === posZ) : null;
-                        let rand = Net.role === 'guest' ? -1 : Math.random();
+                        let layout = Net.role === 'guest'
+                            ? Net.state?.layout?.find(item => item.x === posX && item.z === posZ)
+                            : restoredLayout?.find(item => item.x === posX && item.z === posZ);
+                        let rand = (Net.role === 'guest' || restoredLayout) ? -1 : Math.random();
                         if (layout?.kind === 'prize') {
                             spawnPrize(posX, posZ, layout.points);
                         } else if (layout?.kind === 'medkit') {
@@ -2054,7 +2061,7 @@
                 }
             }
 
-            if (Game.level === Combat.combatRules.boss.level && Net.role !== 'guest') {
+            if (Game.level === Combat.combatRules.boss.level && Net.role !== 'guest' && !restoredLayout) {
                 const bossCell = findBossSpawnCell();
                 if (bossCell) spawnMiniBoss(bossCell.x * Game.cellSize, bossCell.z * Game.cellSize);
             }
@@ -2064,6 +2071,7 @@
             // --- NUEVO: Torres-Portal de inicio y meta en todos los niveles (1 al 11) ---
             createPortalTower(1 * Game.cellSize, 1 * Game.cellSize, true, Game.level);
             createPortalTower((Game.gridSize-2) * Game.cellSize, (Game.gridSize-2) * Game.cellSize, false, Game.level);
+            Game.restoreLayout = null;
         }
 
         function spawnMedkit(x, z) {
@@ -3938,7 +3946,68 @@
 
         let animationStarted = false;
 
-        function initGameSession() {
+        function restoreGameFromSnapshot(snapshot) {
+            if (!snapshot || !Array.isArray(snapshot.maze) || !Array.isArray(snapshot.layout)) return false;
+
+            Game.level = Number(snapshot.level) || 1;
+            Game.maze = snapshot.maze;
+            Game.currentBiome = getBiomeForLevel(Game.level);
+            Game.score = Number(snapshot.score) || 0;
+            Game.lives = Number(snapshot.lives) || 3;
+            Game.time = Number(snapshot.time) || 0;
+            Game.scoreAccumulatorForExtraLife = Number(snapshot.progress) || 0;
+            Game.portalCharge = Number(snapshot.portalCharge) || 0;
+            Game.portalStatus = snapshot.portalStatus || { hostAtGoal:false, guestAtGoal:false };
+            Game.platesUnlocked = !!snapshot.platesUnlocked;
+            Game.plateCharge = Number(snapshot.plateCharge) || 0;
+            Game.coopDowned = snapshot.coopDowned || { host:false, guest:false, hostTimer:0, guestTimer:0 };
+            Game.reviveProgress = Number(snapshot.reviveProgress) || 0;
+            Game.reviveTarget = snapshot.reviveTarget || null;
+            Game.health = snapshot.health || { solo:Game.maxHealth, host:Game.maxHealth, guest:Game.maxHealth };
+            Game.bossDefeated = !!snapshot.bossDefeated;
+            Game.restoreLayout = snapshot.layout;
+
+            buildVisualMaze();
+
+            if (snapshot.player) {
+                playerMesh.position.set(snapshot.player.x, 0, snapshot.player.z);
+                playerMesh.rotation.y = snapshot.player.angle || 0;
+            }
+
+            for (let i = Game.enemies.length - 1; i >= 0; i--) {
+                const enemy = Game.enemies[i];
+                const saved = (snapshot.enemies || []).find(e => e.x === enemy.x && e.z === enemy.z);
+                if (!saved) {
+                    mazeGroup.remove(enemy.mesh);
+                    if (enemy.isBoss) Game.boss = null;
+                    Game.enemies.splice(i, 1);
+                    continue;
+                }
+                enemy.mesh.position.set(saved.px, 0, saved.pz);
+                enemy.hp = saved.hp;
+                enemy.maxHp = saved.maxHp;
+                enemy.role = saved.role;
+            }
+
+            document.getElementById('hud-level').textContent = Game.level;
+            document.getElementById('hud-biome').textContent = Game.currentBiome;
+            document.getElementById('hud-time').textContent = formatTime(Game.time);
+            if (AudioEngine.ctx) AudioEngine.playAmbient(Game.currentBiome);
+            return true;
+        }
+
+        function restoreHostSnapshot(snapshot) {
+            if (Net.role !== 'host' || Game.isReady) return;
+            Net.status('Recuperando partida guardada en este navegador…');
+            document.getElementById('menu-screen').style.opacity = 0;
+            setTimeout(() => {
+                document.getElementById('menu-screen').style.display = 'none';
+                initGameSession(snapshot);
+                Net.status('Partida recuperada · esperando/reconectando al segundo explorador.');
+            }, 220);
+        }
+
+        function initGameSession(snapshot = null) {
             try {
                 init3D();
             } catch (error) {
@@ -3950,18 +4019,29 @@
                 return;
             }
             createPlayer();
-            startNewLevel();
+            const restored = snapshot ? restoreGameFromSnapshot(snapshot) : false;
+            if (!restored) startNewLevel();
             Game.isReady = true;
             Game.clock.start();
-            updateHUD();
             if (Net.role === 'host') Net.makeRemote();
+            if (restored && Net.role === 'host' && Net.remote && snapshot?.guest) {
+                Net.remote.position.set(snapshot.guest.x, 0, snapshot.guest.z);
+            }
             if (Net.role === 'guest') Net.readyLevel = Game.level;
+            syncDownedVisuals();
+            syncCoopPlateVisuals();
+            updateHUD();
+            updateBossHUD(snapshot?.boss);
             document.getElementById('lobby-panel').style.display = 'none';
             document.getElementById('online-entry').style.display = 'none';
-            updateCoopObjective(false, false, 0);
+            updateCoopObjective(
+                !!Game.portalStatus.hostAtGoal,
+                !!Game.portalStatus.guestAtGoal,
+                Game.portalCharge
+            );
             updateReviveUI();
             updateTeammateMarker();
-            
+
             if (!animationStarted) {
                 animate();
                 animationStarted = true;
@@ -3981,6 +4061,7 @@
             Game.medkits = [];
             Game.boss = null;
             Game.bossDefeated = false;
+            Game.restoreLayout = null;
             Game.coopPlates = [];
             Game.platesUnlocked = false;
             Game.plateCharge = 0;
