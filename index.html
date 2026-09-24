@@ -996,7 +996,7 @@
         const Net = {
             role: 'solo', channel: null, code: null, state: null, remote: null,
             frame: 0, poseTimer: 0, hitTarget: null, starting: false, peerConnected: false, tracked: false, subscribed: false,
-            name: '', ready: false, presenceKey: null, hostInfo: null, guestInfo: null, guestProbeTimer: null,
+            name: '', ready: false, presenceKey: null, hostInfo: null, guestInfo: null, guestProbeTimer: null, guestProbeCount: 0,
             send(message) {
                 if (this.channel) this.channel.send({ type: 'broadcast', event: 'game', payload: message })
                     .then(result => { if (result !== 'ok') console.warn('No se pudo enviar mensaje:', result); });
@@ -1096,7 +1096,7 @@
                 this.code = action === 'create' ? String(crypto.getRandomValues(new Uint32Array(1))[0] % 900000 + 100000) : String(code);
                 if (!/^\d{6}$/.test(this.code)) { this.role = 'solo'; return this.status('Escribe un código de seis dígitos.'); }
                 this.peerConnected = false; this.tracked = false; this.subscribed = false;
-                this.ready = false; this.hostInfo = null; this.guestInfo = null;
+                this.ready = false; this.hostInfo = null; this.guestInfo = null; this.guestProbeCount = 0;
                 clearTimeout(this.guestProbeTimer);
                 this.presenceKey = Array.from(crypto.getRandomValues(new Uint8Array(16)), byte => byte.toString(16).padStart(2, '0')).join('');
                 this.channel = this.client.channel('explorador:' + this.code, {
@@ -1140,11 +1140,22 @@
 
                 if (!this.tracked && this.role === 'guest') {
                     if (!hosts.length) {
+                        this.guestProbeCount++;
+                        if (this.guestProbeCount >= 7) {
+                            this.status('No encontramos un anfitrión activo con ese código. Revisa la sala e inténtalo otra vez.');
+                            this.role = 'solo';
+                            const oldChannel = this.channel;
+                            this.channel = null;
+                            if (oldChannel) await this.client.removeChannel(oldChannel);
+                            document.getElementById('lobby-panel').style.display = 'none';
+                            return;
+                        }
                         this.status('Aún no aparece el anfitrión. Verificando sala…');
                         clearTimeout(this.guestProbeTimer);
                         this.guestProbeTimer = setTimeout(() => this.syncPresence().catch(console.error), 700);
                         return;
                     }
+                    this.guestProbeCount = 0;
                     if (guests.length) {
                         this.status('La sala ya tiene dos jugadores.');
                         return;
