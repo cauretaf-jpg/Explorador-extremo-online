@@ -197,7 +197,11 @@ function createProfilePanel({ profileClient, onNameChanged } = {}) {
     const definitions = data?.definitions || [];
     const unlocked = data?.unlocked || [];
     const unlockedMap = new Map(unlocked.map(item => [item.achievement_id, item]));
-    achievementSummary.textContent = unlocked.length + '/' + definitions.length + ' desbloqueados';
+    const points = definitions
+      .filter(definition => unlockedMap.has(definition.id))
+      .reduce((sum, definition) => sum + Number(definition.points || 0), 0);
+    achievementSummary.textContent =
+      unlocked.length + '/' + definitions.length + ' desbloqueados · ' + points + ' pts';
     achievementList.replaceChildren(
       ...definitions.map(definition => createAchievementCard(definition, unlockedMap))
     );
