@@ -1,6 +1,6 @@
 # Roadmap de desarrollo · Explorador Extremo Online
 
-Estado actualizado para V12.6.
+Estado actualizado para V13.
 
 | Prioridad | Mejora | Estado | Siguiente objetivo |
 |---|---|---|---|
@@ -10,7 +10,7 @@ Estado actualizado para V12.6.
 | 4 | Separar el código | Muy avanzado | Combate, red, niveles, progresión, audio y parte relevante de UI ya están modularizados; queda extraer el motor principal/escena |
 | 5 | Mejorar combate | Avanzado | Sistema de arma, cargador, recarga y mejoras implementado; faltan más armas/power-ups físicos |
 | 6 | Mejor progresión | Implementado / expansión | Objetivos 1–11 y mejoras entre niveles; se puede profundizar con más eventos exclusivos |
-| 7 | Ranking y perfiles | Pendiente | Supabase Auth/estadísticas persistentes |
+| 7 | Ranking y perfiles | Implementado / validación | Perfiles locales persistentes, estadísticas, Top 20 y escritura segura mediante Edge Function |
 | 8 | Modo móvil | Implementado / validación | Probar en Android/iOS y ajustar tamaños/sensibilidad según dispositivo |
 | 9 | Logros y desafíos | Pendiente | Sistema persistente de objetivos |
 | 10 | Pulido audiovisual | Parcial | Feedback de impacto, menús y audio |
@@ -61,8 +61,23 @@ Estado actualizado para V12.6.
 - HUD adaptable y soporte de safe areas.
 - Extracción de `src/ui/mobile-controls.js`, `src/ui/mobile.css` y `src/ui/hud.js`.
 
+### V13
+- Perfil persistente por navegador.
+- Cambio de nombre.
+- Estadísticas acumuladas y mejor tiempo/puntaje.
+- Ranking global Top 20.
+- Edge Function de escritura protegida.
+- RLS y permisos de mínimo privilegio.
+- Registro idempotente y cola local de reintentos.
+
 ## Próximas versiones propuestas
 
-### V13 · Persistencia
-- Perfil de jugador.
-- Ranking, récords y estadísticas con Supabase.
+### V13.1 · Logros y desafíos
+- Logros persistentes basados en estadísticas.
+- Desafíos por bioma y combate.
+- Insignias visibles en el perfil.
+- Retos diarios/semanales opcionales.
+
+### V14 · Cuenta opcional
+- Supabase Auth para migrar el perfil local a una cuenta.
+- Sincronización del mismo perfil entre dispositivos.
