@@ -1589,10 +1589,9 @@
                     const mesh = new THREE.Mesh(this.shotGeometry, this.enemyShotMaterial);
                     mesh.position.set(shot.x, shot.y, shot.z); this.shotGroup.add(mesh);
                 }
-                if (state.gameOver && !Game.gameOver) endGame();
-                if (state.gameOver && state.level > 11) {
-                    document.getElementById('victory-time').textContent = formatTime(state.time);
-                    document.getElementById('victory-score').textContent = state.score;
+                if (state.gameOver && !Game.gameOver) {
+                    if (state.level > 11) triggerVictory(state);
+                    else endGame();
                 }
             }
         };
@@ -1744,6 +1743,12 @@
                 prevMouseY: 0
             }
         };
+
+        let LocalMatchRecord = { id: crypto.randomUUID(), submitted: false };
+
+        function resetLocalMatchRecord() {
+            LocalMatchRecord = { id: crypto.randomUUID(), submitted: false };
+        }
 
         const {
             BiomeConfigs,
@@ -3100,7 +3105,37 @@
             }, Game.cinematic.duration * 1000 - 500);
         }
 
-        function triggerVictory() {
+        function recordPersistentMatch(won) {
+            if (!ProfileClient || LocalMatchRecord.submitted) return;
+            LocalMatchRecord.submitted = true;
+
+            const role = localCombatRole();
+            const playerStats = Game.matchStats?.players?.[role] || { enemiesDefeated: 0, revives: 0 };
+            const match = {
+                match_id: LocalMatchRecord.id,
+                won: !!won,
+                score: Math.max(0, Math.floor(Game.score || 0)),
+                time_seconds: Math.max(1, Math.floor(Game.time || 1)),
+                max_level: Math.max(1, Math.min(11, Math.floor(Game.matchStats?.maxLevel || Math.min(Game.level, 11) || 1))),
+                enemies_defeated: Math.max(0, Math.floor(playerStats.enemiesDefeated || 0)),
+                revives: Math.max(0, Math.floor(playerStats.revives || 0)),
+                levels_completed: Math.max(0, Math.min(11, Math.floor(Game.matchStats?.levelsCompleted || 0)))
+            };
+
+            ProfileClient.recordMatch(match).then(() => {
+                ProfilePanel?.refresh?.().catch?.(() => {});
+            }).catch(error => {
+                console.warn('La partida quedó en cola para sincronizar estadísticas:', error);
+            });
+        }
+
+        function triggerVictory(authoritativeState = null) {
+            if (authoritativeState) {
+                Game.level = authoritativeState.level;
+                Game.time = authoritativeState.time;
+                Game.score = authoritativeState.score;
+                if (authoritativeState.matchStats) Game.matchStats = authoritativeState.matchStats;
+            }
             Game.gameOver = true;
             Game.isReady = false;
             AudioEngine.stopAmbient();
@@ -3109,8 +3144,9 @@
             document.getElementById('victory-score').innerText = Game.score;
             document.getElementById('upgrade-screen').style.display = 'none';
             document.getElementById('victory-screen').style.display = 'flex';
-            if (Net.role === 'host') { Net.frame = 1; Net.sendState(0); }
+            if (!authoritativeState && Net.role === 'host') { Net.frame = 1; Net.sendState(0); }
             if (Net.role !== 'solo') Net.persistSession({ inGame:false });
+            recordPersistentMatch(true);
         }
 
         function localCombatRole() {
@@ -3508,6 +3544,7 @@
             Game.progressionPaused = false;
             Game.pendingUpgradeLevel = null;
             Game.matchStats = createMatchStats();
+            resetLocalMatchRecord();
             document.getElementById('upgrade-screen').style.display = 'none';
             setMobileGameActive(true);
             Net.status(Net.role === 'solo'
@@ -3597,6 +3634,7 @@
             document.getElementById('game-over-screen').style.display = 'flex';
             if (Net.role === 'host') { Net.frame = 1; Net.sendState(0); }
             if (Net.role !== 'solo') Net.persistSession({ inGame:false });
+            recordPersistentMatch(false);
         }
 
         setInterval(() => {
@@ -4160,6 +4198,9 @@
             if (Net.role === 'solo') NetworkSession?.clearSession?.();
             if (Net.role === 'guest' && !Net.state) return;
             Net.starting = true;
+            ProfileClient?.ensureProfile?.(document.getElementById('player-name').value || '').catch(error => {
+                console.warn('Perfil persistente no disponible al iniciar:', error);
+            });
             if (Net.role === 'host') Net.send({ type: 'start' });
             AudioEngine.init();
             document.getElementById('menu-screen').style.opacity = 0;
