@@ -23,6 +23,8 @@ await build({ entryPoints: [path.join(root, 'src/audio/engine.js')], bundle: tru
   format: 'iife', platform: 'browser', outfile: path.join(dist, 'audio-engine.js') });
 await build({ entryPoints: [path.join(root, 'src/ui/mobile-controls.js')], bundle: true, minify: true,
   format: 'iife', platform: 'browser', outfile: path.join(dist, 'mobile-controls.js') });
+await build({ entryPoints: [path.join(root, 'src/ui/hud.js')], bundle: true, minify: true,
+  format: 'iife', platform: 'browser', outfile: path.join(dist, 'ui-hud.js') });
 const defaults = JSON.parse(fs.readFileSync(path.join(root, 'supabase.public.json'), 'utf8'));
 const config = {
   url: process.env.SUPABASE_URL || defaults.url,
