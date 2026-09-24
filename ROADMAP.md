@@ -1,6 +1,6 @@
 # Roadmap de desarrollo · Explorador Extremo Online
 
-Estado actualizado para V13.2.
+Estado actualizado para V13.2.1.
 
 | Prioridad | Mejora | Estado | Siguiente objetivo |
 |---|---|---|---|
@@ -108,3 +108,13 @@ Estado actualizado para V13.2.
 ## Prueba pendiente V13.2
 
 Validar el Modo Batalla con 3–8 dispositivos/navegadores reales, incluyendo entrada simultánea, ready-check, disparos, respawn, desconexión y resultado final.
+
+
+### V13.2.1 · Estabilización
+- Protocolo Battle firmado y versionado.
+- Uplink por jugador y reducción de tráfico Realtime.
+- Reconexión básica y gracia ante desconexión del host.
+- Gestión explícita de recursos Three.js.
+- Team wipe, péndulo y spawn del Guardián corregidos.
+- Ranking consistente y perfiles vacíos fuera del Top.
+- CI con tests y build.

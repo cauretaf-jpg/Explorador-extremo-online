@@ -1,6 +1,22 @@
-# Explorador Extremo V13.2 · modo batalla multijugador
+# Explorador Extremo V13.2.1 · estabilización multijugador
 
 Copia independiente del juego del profesor Juan Neira (crédito conservado en pantalla). V13 mantiene el modo individual y cooperativo y agrega persistencia de perfiles, estadísticas y ranking con Supabase.
+
+## Novedades V13.2.1
+
+- Protocolo Battle v2 con ECDSA P-256.
+- Uplink firmado por jugador; controles críticos aceptados solo del host.
+- Poses a 8 Hz y snapshots a 4 Hz para reducir tráfico Realtime.
+- Reconexión básica del invitado y gracia de 15 segundos ante caída del host.
+- Protocolo cooperativo versionado.
+- Team wipe consume una sola vida.
+- Correcciones de péndulo y spawn del Guardián.
+- Liberación explícita de recursos Three.js.
+- Ranking sin perfiles de 0 partidas y desempates consistentes.
+- Índice de logros faltante agregado.
+- Los visitantes nuevos no crean perfil por abrir el sitio.
+- CI con tests + build.
+- Paquete **1.3.3**.
 
 ## Novedades V13.2
 
