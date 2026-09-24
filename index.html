@@ -14,7 +14,10 @@
     <script src="./audio-engine.js"></script>
     <script src="./mobile-controls.js"></script>
     <script src="./ui-hud.js"></script>
+    <script src="./profile-client.js"></script>
+    <script src="./profile-panel.js"></script>
     <link rel="stylesheet" href="./mobile.css">
+    <link rel="stylesheet" href="./profile.css">
     <style>
         * {
             box-sizing: border-box;
@@ -623,7 +626,7 @@
     <div id="menu-screen" class="overlay">
         <h1>Explorador Extremo 3D</h1>
         <div class="author-tag">Autor del Juego: Profesor Juan Neira</div>
-        <div class="subtitle">V12.6 · Modo móvil y UI modular</div>
+        <div class="subtitle">V13 · Perfiles, estadísticas y ranking</div>
         <button class="btn" id="btn-start">Jugar solo</button>
 
         <div id="online-entry">
@@ -1023,6 +1026,8 @@
         const AudioEngine = window.ExploradorAudioEngine;
 
         const NetworkSession = window.ExploradorNetworkSession;
+        const ProfileClient = window.ExploradorProfile?.createProfileClient?.() || null;
+        let ProfilePanel = null;
 
         // El anfitrión ejecuta la física; el invitado recibe instantáneas del mundo.
         const Net = {
@@ -1072,6 +1077,7 @@
                 this.name = String(session.name || '').slice(0, 18);
                 if (this.name.length < 2) return this.status('No se pudo recuperar el nombre de la sesión.');
                 document.getElementById('player-name').value = this.name;
+                ProfileClient?.rename?.(this.name).catch(error => console.warn('No se pudo sincronizar el perfil recuperado:', error));
                 document.getElementById('room-code').value = session.code;
                 this.ready = !!session.ready;
                 this.presenceKey = session.presenceKey || null;
@@ -1148,6 +1154,7 @@
                 }
                 this.name = rawName.slice(0, 18);
                 localStorage.setItem('explorador-player-name', this.name);
+                ProfileClient?.rename?.(this.name).catch(error => console.warn('No se pudo sincronizar el nombre del perfil:', error));
                 NetworkSession?.clearSession?.();
                 this.status('Conectando a la sala…');
                 this.connectRoom(action, code).catch(error => {
@@ -1454,6 +1461,7 @@
                     progression: Game.progression,
                     progressionPaused: Game.progressionPaused,
                     pendingUpgradeLevel: Game.pendingUpgradeLevel,
+                    matchStats: Game.matchStats,
                     bossDefeated: Game.bossDefeated,
                     boss: Game.boss ? {
                         hp: Game.boss.hp, maxHp: Game.boss.maxHp,
@@ -1521,6 +1529,7 @@
                 }
                 Game.progressionPaused = !!state.progressionPaused;
                 Game.pendingUpgradeLevel = state.pendingUpgradeLevel || null;
+                if (state.matchStats) Game.matchStats = state.matchStats;
                 updateUpgradeScreen();
                 Game.bossDefeated = !!state.bossDefeated;
                 if (state.boss && Game.boss) {
@@ -1600,6 +1609,27 @@
 
         const rememberedName = localStorage.getItem('explorador-player-name');
         if (rememberedName) document.getElementById('player-name').value = rememberedName;
+
+        if (ProfileClient && window.ExploradorProfileUI) {
+            ProfilePanel = window.ExploradorProfileUI.createProfilePanel({
+                profileClient: ProfileClient,
+                onNameChanged(name) {
+                    document.getElementById('player-name').value = name;
+                    if (Net.role !== 'solo') {
+                        Net.name = name;
+                        Net.refreshPresence().catch(console.error);
+                        Net.persistSession({ name });
+                    }
+                }
+            });
+            ProfileClient.ensureProfile(rememberedName || '').then(profile => {
+                if (!rememberedName && profile?.display_name) {
+                    document.getElementById('player-name').value = profile.display_name;
+                    localStorage.setItem('explorador-player-name', profile.display_name);
+                }
+            }).catch(error => console.warn('Perfil persistente no disponible:', error));
+        }
+
         const invitedRoom = new URLSearchParams(location.search).get('sala');
         if (/^\d{6}$/.test(invitedRoom || '')) {
             document.getElementById('room-code').value = invitedRoom;
@@ -1639,6 +1669,20 @@
             combatRules: { maxHealth:100, reviveHealth:50, medkitHeal:35, medkitsPerLevel:2, bulletDamage:1,
                 boss:{ level:3, name:'Guardián del Desierto', hp:28, damage:44, attackCooldown:1.15, speedMultiplier:.68, score:3500 } }
         };
+
+        function createMatchStats() {
+            return {
+                matchId: crypto.randomUUID(),
+                recorded: false,
+                maxLevel: 1,
+                levelsCompleted: 0,
+                players: {
+                    solo: { enemiesDefeated: 0, revives: 0 },
+                    host: { enemiesDefeated: 0, revives: 0 },
+                    guest: { enemiesDefeated: 0, revives: 0 }
+                }
+            };
+        }
         
         const Game = {
             score: 0,
@@ -1677,6 +1721,7 @@
             progression: Progression.createProgressionState(Combat.combatRules.maxHealth),
             progressionPaused: false,
             pendingUpgradeLevel: null,
+            matchStats: createMatchStats(),
             coopPlates: [],
             platesUnlocked: false,
             plateCharge: 0,
@@ -2983,6 +3028,7 @@
                 dir,
                 speed: p.weapon.projectileSpeed,
                 damage: p.weapon.damage,
+                ownerRole: role,
                 origin: shooter.position.clone()
             });
             if (p.ammo[role] <= 0) reloadWeapon(role);
@@ -2998,6 +3044,7 @@
 
             Game.maze = Net.role === 'guest' && Net.state ? Net.state.maze : generateMaze(Game.gridSize);
             Game.currentBiome = getBiomeForLevel(Game.level);
+            Game.matchStats.maxLevel = Math.max(Game.matchStats.maxLevel || 1, Math.min(11, Game.level));
             Game.portalCharge = 0;
             Game.portalStatus = { hostAtGoal: false, guestAtGoal: false };
             Game.plateCharge = 0;
@@ -3153,6 +3200,8 @@
                 target.rotation.z = 0;
                 target.position.y = 0;
             }
+            const rescuerRole = role === 'host' ? 'guest' : 'host';
+            if (Game.matchStats.players[rescuerRole]) Game.matchStats.players[rescuerRole].revives++;
             addScore(500);
             updateHUD();
             Net.status((role === 'host' ? (Net.hostInfo?.name || 'Anfitrión') : (Net.guestInfo?.name || 'Invitado')) + ' fue reanimado.');
@@ -3458,6 +3507,7 @@
 
             Game.progressionPaused = false;
             Game.pendingUpgradeLevel = null;
+            Game.matchStats = createMatchStats();
             document.getElementById('upgrade-screen').style.display = 'none';
             setMobileGameActive(true);
             Net.status(Net.role === 'solo'
@@ -3476,6 +3526,7 @@
             const completedLevel = Game.level;
             const profile = Progression.getLevelProfile(completedLevel);
             addScore(profile.reward || 0);
+            Game.matchStats.levelsCompleted = Math.min(11, (Game.matchStats.levelsCompleted || 0) + 1);
             Game.portalCharge = 0;
             Game.level++;
 
@@ -3868,6 +3919,10 @@
                             scene.remove(enemy.mesh);
                             mazeGroup.remove(enemy.mesh);
                             Game.enemies.splice(j, 1);
+                            const killerRole = arrow.ownerRole || (Net.role === 'solo' ? 'solo' : 'host');
+                            if (Game.matchStats.players[killerRole]) {
+                                Game.matchStats.players[killerRole].enemiesDefeated++;
+                            }
 
                             if (enemy.isBoss) {
                                 Game.bossDefeated = true;
@@ -4153,6 +4208,7 @@
             }
             Game.progressionPaused = !!snapshot.progressionPaused;
             Game.pendingUpgradeLevel = snapshot.pendingUpgradeLevel || null;
+            Game.matchStats = snapshot.matchStats || Game.matchStats || createMatchStats();
             Game.bossDefeated = !!snapshot.bossDefeated;
             Game.restoreLayout = snapshot.layout;
 
