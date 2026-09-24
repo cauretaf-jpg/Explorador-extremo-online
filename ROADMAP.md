@@ -1,6 +1,6 @@
 # Roadmap de desarrollo · Explorador Extremo Online
 
-Estado actualizado para V13.2.1.
+Estado actualizado para V13.2.2.
 
 | Prioridad | Mejora | Estado | Siguiente objetivo |
 |---|---|---|---|
@@ -118,3 +118,10 @@ Validar el Modo Batalla con 3–8 dispositivos/navegadores reales, incluyendo en
 - Team wipe, péndulo y spawn del Guardián corregidos.
 - Ranking consistente y perfiles vacíos fuera del Top.
 - CI con tests y build.
+
+
+### V13.2.2 · Hotfix de mejoras
+- Pantalla de mejora idempotente.
+- Clic/tap sobre tarjetas restaurado.
+- Eliminado rerender de mejoras por frame.
+- Test automático de interacción de mejoras.

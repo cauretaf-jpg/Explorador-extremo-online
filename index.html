@@ -502,6 +502,7 @@
             display:none;
             z-index:125;
             background:radial-gradient(circle, rgba(18,30,24,.97), rgba(3,7,5,.995));
+            pointer-events:auto;
         }
         #upgrade-screen h2 {
             color:#ffd700;
@@ -511,6 +512,7 @@
         }
         #upgrade-options {
             display:grid;
+            pointer-events:auto;
             grid-template-columns:repeat(3,minmax(0,1fr));
             gap:14px;
             width:min(920px,92vw);
@@ -526,6 +528,10 @@
             cursor:pointer;
             transition:.2s ease;
             text-align:left;
+            pointer-events:auto;
+            touch-action:manipulation;
+            position:relative;
+            z-index:1;
         }
         .upgrade-card:hover {
             transform:translateY(-4px);
@@ -629,7 +635,7 @@
     <div id="menu-screen" class="overlay">
         <h1>Explorador Extremo 3D</h1>
         <div class="author-tag">Autor del Juego: Profesor Juan Neira</div>
-        <div class="subtitle">V13.2.1 · Estabilización multijugador</div>
+        <div class="subtitle">V13.2.2 · Corrección de mejoras</div>
         <button class="btn" id="btn-start">Jugar solo</button>
 
         <div id="online-entry">
@@ -3870,7 +3876,8 @@
 
             if (Net.role === 'guest' && Net.state?.gameOver) { renderer.render(scene, camera); return; }
             if (Game.progressionPaused) {
-                updateUpgradeScreen();
+                // La pantalla ya se renderiza al entrar en pausa o al recibir estado del host.
+                // No reconstruirla en cada frame: eso cancelaba los clics sobre las mejoras.
                 updateWeaponHUD();
                 if (Net.role === 'host') Net.sendState(delta);
                 renderer.render(scene, camera);
