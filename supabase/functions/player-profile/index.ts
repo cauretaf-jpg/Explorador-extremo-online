@@ -73,6 +73,7 @@ Deno.serve(async (req: Request) => {
       .from("player_profiles")
       .insert({ id: playerId, display_name: displayName })
       .select("*").single();
+
     if (profileError) return json({ error: "profile_create_failed", detail: profileError.message }, 400);
 
     const { error: credentialError } = await supabase
@@ -112,20 +113,69 @@ Deno.serve(async (req: Request) => {
     const matchId = match?.match_id;
     if (!validUuid(matchId)) return json({ error: "invalid_match_id" }, 400);
 
-    const { data, error } = await supabase.rpc("record_player_match", {
+    const won = !!match.won;
+    const score = clampInt(match.score, 0, 10_000_000);
+    const timeSeconds = clampInt(match.time_seconds, 1, 86_400);
+    const maxLevel = clampInt(match.max_level, 1, 11);
+    const enemiesDefeated = clampInt(match.enemies_defeated, 0, 5000);
+    const revives = clampInt(match.revives, 0, 1000);
+    const levelsCompleted = clampInt(match.levels_completed, 0, 11);
+    const bossesDefeated = clampInt(match.bosses_defeated, 0, 50);
+    const mode = match.mode === "coop" ? "coop" : "solo";
+
+    const { data: profileAfterMatch, error } = await supabase.rpc("record_player_match", {
       p_match_id: matchId,
       p_player_id: playerId,
-      p_won: !!match.won,
-      p_score: clampInt(match.score, 0, 10_000_000),
-      p_time_seconds: clampInt(match.time_seconds, 1, 86_400),
-      p_max_level: clampInt(match.max_level, 1, 11),
-      p_enemies_defeated: clampInt(match.enemies_defeated, 0, 5000),
-      p_revives: clampInt(match.revives, 0, 1000),
-      p_levels_completed: clampInt(match.levels_completed, 0, 11)
+      p_won: won,
+      p_score: score,
+      p_time_seconds: timeSeconds,
+      p_max_level: maxLevel,
+      p_enemies_defeated: enemiesDefeated,
+      p_revives: revives,
+      p_levels_completed: levelsCompleted
     });
 
     if (error) return json({ error: "match_record_failed", detail: error.message }, 400);
-    return json({ profile: data });
+
+    const { data: unlockedIds, error: achievementError } = await supabase.rpc("unlock_player_achievements", {
+      p_player_id: playerId,
+      p_match_id: matchId,
+      p_mode: mode,
+      p_won: won,
+      p_score: score,
+      p_time_seconds: timeSeconds,
+      p_max_level: maxLevel,
+      p_enemies_defeated: enemiesDefeated,
+      p_revives: revives,
+      p_levels_completed: levelsCompleted,
+      p_bosses_defeated: bossesDefeated
+    });
+
+    if (achievementError) {
+      return json({ error: "achievement_unlock_failed", detail: achievementError.message }, 400);
+    }
+
+    const ids = Array.isArray(unlockedIds) ? unlockedIds : [];
+    let unlockedAchievements: unknown[] = [];
+    if (ids.length) {
+      const { data } = await supabase
+        .from("achievement_definitions")
+        .select("id,title,description,category,icon,points,sort_order")
+        .in("id", ids)
+        .order("sort_order", { ascending: true });
+      unlockedAchievements = data || [];
+    }
+
+    const { data: freshProfile } = await supabase
+      .from("player_profiles")
+      .select("*")
+      .eq("id", playerId)
+      .single();
+
+    return json({
+      profile: freshProfile || profileAfterMatch,
+      unlocked_achievements: unlockedAchievements
+    });
   }
 
   return json({ error: "unknown_action" }, 400);
