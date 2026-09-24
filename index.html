@@ -454,7 +454,7 @@
         </div>
         <div class="instructions">
             <strong>CONTROLES DE EXPEDICIÓN:</strong><br>
-            • Mover Explorador: <strong>Flechas del Teclado (Adaptado a la cámara)</strong><br>
+            • Mover Explorador: <strong>WASD o Flechas del Teclado (adaptado a la cámara)</strong><br>
             • Disparar Rifle de Expedición: <strong>Barra Espaciadora</strong><br>
             • Rotar Vista 360°: <strong>Mantener Click Izquierdo y arrastrar</strong><br>
             • Zoom de Perspectiva: <strong>Rueda del Mouse (Scroll)</strong><br><br>
@@ -2634,24 +2634,45 @@
             }
         }, 1000);
 
+        // --- CONTROLES DE MOVIMIENTO: WASD + FLECHAS ---
+        function movementKeyForEvent(e) {
+            const key = (e.key || '').toLowerCase();
+            if (e.code === 'KeyW' || key === 'w' || e.key === 'ArrowUp') return 'ArrowUp';
+            if (e.code === 'KeyS' || key === 's' || e.key === 'ArrowDown') return 'ArrowDown';
+            if (e.code === 'KeyA' || key === 'a' || e.key === 'ArrowLeft') return 'ArrowLeft';
+            if (e.code === 'KeyD' || key === 'd' || e.key === 'ArrowRight') return 'ArrowRight';
+            return null;
+        }
+
         window.addEventListener('keydown', (e) => {
             if(!Game.isReady) return;
-            if(e.key === 'ArrowUp') Game.keys.ArrowUp = true;
-            if(e.key === 'ArrowDown') Game.keys.ArrowDown = true;
-            if(e.key === 'ArrowLeft') Game.keys.ArrowLeft = true;
-            if(e.key === 'ArrowRight') Game.keys.ArrowRight = true;
-            
+
+            const movementKey = movementKeyForEvent(e);
+            if (movementKey) {
+                Game.keys[movementKey] = true;
+                e.preventDefault();
+            }
+
             if(e.key === ' ' || e.code === 'Space') {
+                e.preventDefault();
                 if (Net.role === 'guest') Net.send({ type: 'shoot' });
                 else fireArrow();
             }
         });
 
         window.addEventListener('keyup', (e) => {
-            if(e.key === 'ArrowUp') Game.keys.ArrowUp = false;
-            if(e.key === 'ArrowDown') Game.keys.ArrowDown = false;
-            if(e.key === 'ArrowLeft') Game.keys.ArrowLeft = false;
-            if(e.key === 'ArrowRight') Game.keys.ArrowRight = false;
+            if(!Game.isReady) return;
+
+            const movementKey = movementKeyForEvent(e);
+            if (movementKey) {
+                Game.keys[movementKey] = false;
+                e.preventDefault();
+            }
+        });
+
+        // Evita que una tecla quede "pegada" al cambiar de pestaña o perder foco.
+        window.addEventListener('blur', () => {
+            Object.keys(Game.keys).forEach(key => Game.keys[key] = false);
         });
 
         // --- SISTEMA DE COLISIONES SENIOR CON MUROS DE GROSOR 0.5X ---
