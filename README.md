@@ -1,6 +1,25 @@
-# Explorador Extremo V12.5 · progresión de expedición
+# Explorador Extremo V12.6 · modo móvil y UI modular
 
 Copia independiente del juego del profesor Juan Neira (crédito conservado en pantalla). La V12 mantiene el modo individual y refuerza el cooperativo de dos jugadores usando Supabase Realtime.
+
+## Novedades V12.6
+
+- **Modo móvil táctil** detectado automáticamente en dispositivos con puntero táctil.
+- Joystick virtual analógico para movimiento relativo a la cámara.
+- Botón táctil de disparo con disparo mantenido respetando el cooldown del arma.
+- Botón táctil de **recarga**.
+- Botón táctil de **interacción/reanimación** mantenida.
+- Cámara táctil mediante arrastre sobre la escena.
+- Botones **+ / −** para zoom en móvil.
+- HUD reposicionado para convivir con joystick y botones sin tapar información crítica.
+- Soporte para áreas seguras de pantalla mediante `env(safe-area-inset-*)`.
+- Menú y pantalla de mejoras adaptados a pantallas pequeñas y orientación vertical.
+- Los controles táctiles se ocultan automáticamente durante cinemáticas finales, fin de partida y elección de mejoras.
+- Modularización ampliada:
+  - `src/ui/mobile-controls.js`
+  - `src/ui/mobile.css`
+  - `src/ui/hud.js`
+- Salud, arma, objetivo de nivel y pantalla de mejoras pasan a renderizarse mediante el módulo de UI.
 
 ## Novedades V12.5
 
@@ -113,4 +132,4 @@ La versión del curso tenía un cierre de testing el 3 de octubre de 2026. Esta 
 
 ## Validación
 
-La sintaxis del script principal se comprueba antes de publicar y Vercel debe completar el build. La validación funcional final debe hacerse con dos clientes reales conectados al mismo despliegue HTTPS, incluyendo: desconectar/red-conectar, recargar invitado, recargar anfitrión, reanudar sala, movimiento, combate y progresión.
+La sintaxis del script principal y de los módulos se comprueba antes de publicar y Vercel debe completar el build. La validación funcional final debe cubrir escritorio y móvil, además de dos clientes online: joystick, cámara táctil, disparo, recarga, interacción/reanimación, rotación de pantalla, reconexión, combate y progresión.
