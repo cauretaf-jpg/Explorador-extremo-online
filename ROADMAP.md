@@ -103,3 +103,8 @@ Estado actualizado para V13.2.
 ### V14 · Cuenta opcional
 - Supabase Auth para migrar el perfil local a una cuenta.
 - Sincronización del mismo perfil entre dispositivos.
+
+
+## Prueba pendiente V13.2
+
+Validar el Modo Batalla con 3–8 dispositivos/navegadores reales, incluyendo entrada simultánea, ready-check, disparos, respawn, desconexión y resultado final.
