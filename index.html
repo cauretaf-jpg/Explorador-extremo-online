@@ -1,0 +1,2731 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Explorador Extremo 3D - Edición Senior Profesional</title>
+    <script src="./three.min.js"></script>
+    <script src="./supabase-client.js"></script>
+    <script src="./config.js"></script>
+    <style>
+        * {
+            box-sizing: border-box;
+            margin: 0;
+            padding: 0;
+            user-select: none;
+        }
+        body, html {
+            width: 100%;
+            height: 100%;
+            overflow: hidden;
+            background-color: #050505;
+            font-family: 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
+        }
+        #canvas-container {
+            width: 100%;
+            height: 100%;
+            position: absolute;
+            top: 0;
+            left: 0;
+            z-index: 1;
+            cursor: grab;
+        }
+        #canvas-container:active {
+            cursor: grabbing;
+        }
+        /* HUD Superior */
+        #hud {
+            position: absolute;
+            top: 15px;
+            left: 15px;
+            right: 15px;
+            z-index: 10;
+            display: flex;
+            justify-content: space-between;
+            pointer-events: none;
+            color: #fff;
+            text-shadow: 2px 2px 4px rgba(0,0,0,0.9);
+            font-weight: bold;
+            font-size: 1.1rem;
+        }
+        .hud-panel {
+            background: rgba(10, 15, 10, 0.75);
+            padding: 10px 22px;
+            border-radius: 12px;
+            border: 2px solid #ffd700;
+            box-shadow: 0 0 20px rgba(255, 215, 0, 0.25);
+            backdrop-filter: blur(8px);
+        }
+        .hud-center {
+            text-align: center;
+            font-size: 1.4rem;
+            color: #00ffcc;
+        }
+        /* Overlays / Pantallas */
+        .overlay {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            z-index: 100;
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+            align-items: center;
+            background: radial-gradient(circle, rgba(20,35,25,0.92) 0%, rgba(4,8,5,0.98) 100%);
+            color: white;
+            transition: opacity 0.5s ease;
+        }
+        #game-over-screen {
+            background: radial-gradient(circle, rgba(60,10,10,0.95) 0%, rgba(15,2,2,0.99) 100%);
+            display: none;
+        }
+        /* --- NUEVO: overlay de control de vigencia de Testing --- */
+        #testing-finalizado-overlay {
+            position: fixed;
+            top: 0; left: 0;
+            width: 100%; height: 100%;
+            background: rgba(0,0,0,0.92);
+            color: #ff3333;
+            display: none;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            font-family: 'Arial', sans-serif;
+            font-size: 3em;
+            font-weight: bold;
+            letter-spacing: 4px;
+            z-index: 999999;
+            text-align: center;
+        }
+        #testing-finalizado-overlay .subtitle-testing {
+            font-size: 0.35em;
+            color: #ffffff;
+            margin-top: 20px;
+            letter-spacing: 2px;
+        }
+        h1 {
+            font-size: 3.8rem;
+            margin-bottom: 5px;
+            text-transform: uppercase;
+            letter-spacing: 3px;
+            text-shadow: 0 0 25px rgba(255,215,0,0.6);
+            animation: pulse 2.5s infinite alternate;
+            text-align: center;
+        }
+        #menu-screen h1 { color: #ffd700; }
+        #game-over-screen h1 {
+            color: #ff3333;
+            text-shadow: 0 0 25px rgba(255,51,51,0.7);
+        }
+        .author-tag {
+            font-size: 1.4rem;
+            color: #00ffcc;
+            margin-bottom: 15px;
+            font-weight: bold;
+            letter-spacing: 1.5px;
+            text-shadow: 0 0 10px rgba(0,255,204,0.5);
+            background: rgba(0,0,0,0.4);
+            padding: 6px 20px;
+            border-radius: 20px;
+            border: 1px solid rgba(0,255,204,0.4);
+        }
+        .subtitle {
+            font-size: 1.2rem;
+            margin-bottom: 30px;
+            color: #ddd;
+            font-style: italic;
+        }
+        .btn {
+            padding: 16px 45px;
+            font-size: 1.4rem;
+            font-weight: bold;
+            color: #050505;
+            background: linear-gradient(45deg, #ffd700, #ff8c00);
+            border: none;
+            border-radius: 35px;
+            cursor: pointer;
+            box-shadow: 0 6px 20px rgba(0,0,0,0.6), 0 0 25px rgba(255,215,0,0.5);
+            transition: all 0.25s ease;
+            text-transform: uppercase;
+        }
+        .btn:hover {
+            transform: scale(1.06) translateY(-3px);
+            box-shadow: 0 10px 25px rgba(0,0,0,0.7), 0 0 35px rgba(255,215,0,0.8);
+        }
+        .btn:active {
+            transform: scale(0.97) translateY(1px);
+        }
+        .stats-summary {
+            background: rgba(0,0,0,0.5);
+            padding: 20px 40px;
+            border-radius: 12px;
+            border: 1px solid #ff3333;
+            margin-bottom: 30px;
+            font-size: 1.3rem;
+            line-height: 2;
+            text-align: center;
+        }
+        .stats-summary span { color: #ffcc00; font-weight: bold; }
+        .instructions {
+            margin-top: 25px;
+            background: rgba(255,255,255,0.08);
+            padding: 18px 25px;
+            border-radius: 12px;
+            font-size: 0.95rem;
+            max-width: 580px;
+            text-align: center;
+            line-height: 1.5;
+            border: 1px solid rgba(255,255,255,0.15);
+        }
+        @keyframes pulse {
+            0% { transform: scale(1); }
+            100% { transform: scale(1.02); }
+        }
+
+        /* --- Barra de progreso hacia vida extra --- */
+        .extralife-bar-track {
+            width: 130px;
+            height: 6px;
+            background: rgba(255,255,255,0.15);
+            border-radius: 4px;
+            overflow: hidden;
+            margin-top: 3px;
+            border: 1px solid rgba(255,102,204,0.4);
+        }
+        .extralife-bar-fill {
+            height: 100%;
+            width: 0%;
+            background: linear-gradient(90deg, #ff2d95, #ff8ccc);
+            box-shadow: 0 0 8px rgba(255,45,149,0.8);
+            transition: width 0.3s ease;
+        }
+
+        /* --- Banner cinemática de entrada de nivel --- */
+        #level-cinematic-banner {
+            position: absolute;
+            top: 42%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            z-index: 50;
+            text-align: center;
+            pointer-events: none;
+            opacity: 0;
+            transition: opacity 0.8s ease;
+        }
+        #level-cinematic-banner.show { opacity: 1; }
+        #level-cinematic-title {
+            font-size: 3.2rem;
+            font-weight: bold;
+            letter-spacing: 4px;
+            text-transform: uppercase;
+            color: #ffd700;
+            text-shadow: 0 0 30px rgba(255,215,0,0.85), 0 0 60px rgba(255,215,0,0.4);
+        }
+        #level-cinematic-subtitle {
+            font-size: 1.5rem;
+            margin-top: 8px;
+            color: #00ffcc;
+            letter-spacing: 3px;
+            text-shadow: 0 0 15px rgba(0,255,204,0.7);
+        }
+
+        /* --- Toast de vida extra --- */
+        #extralife-toast {
+            position: absolute;
+            top: 18%;
+            left: 50%;
+            transform: translate(-50%, -20px);
+            z-index: 60;
+            background: rgba(20,5,15,0.85);
+            border: 2px solid #ff2d95;
+            color: #ff8ccc;
+            padding: 14px 34px;
+            border-radius: 30px;
+            font-size: 1.5rem;
+            font-weight: bold;
+            letter-spacing: 1px;
+            box-shadow: 0 0 30px rgba(255,45,149,0.7);
+            opacity: 0;
+            pointer-events: none;
+            transition: opacity 0.4s ease, transform 0.4s ease;
+        }
+        #extralife-toast.show {
+            opacity: 1;
+            transform: translate(-50%, 0px);
+        }
+
+        #victory-screen {
+            background: radial-gradient(circle, rgba(40,32,4,0.95) 0%, rgba(10,8,1,0.99) 100%);
+            display: none;
+        }
+    </style>
+</head>
+<body>
+
+    <div id="hud">
+        <div class="hud-panel">
+            <div>Vidas: <span id="hud-lives" style="color: #ff3366;">3</span> ❤️</div>
+            <div>Puntos: <span id="hud-score" style="color: #ffd700;">0</span> 🪙</div>
+        </div>
+        <div class="hud-panel hud-center">
+            <div id="hud-biome">Selva</div>
+            <div style="font-size: 0.85rem; color: #aaa;">Nivel: <span id="hud-level" style="color: #fff;">1</span></div>
+        </div>
+        <div class="hud-panel" style="text-align: right;">
+            <div>Tiempo: <span id="hud-time" style="color: #00ffcc;">00:00</span> ⏱️</div>
+            <div style="font-size: 0.8rem; opacity: 0.85;">Bono 5m: <span id="hud-survival-bonus">0/300s</span></div>
+            <div style="font-size: 0.78rem; opacity: 0.9; margin-top: 4px;">
+                Vida extra: <span id="hud-extralife-remaining" style="color:#ff66cc;">15000</span> pts
+                <div class="extralife-bar-track"><div id="hud-extralife-bar" class="extralife-bar-fill"></div></div>
+            </div>
+        </div>
+    </div>
+
+    <div id="canvas-container"></div>
+    <div id="online-status" style="position:absolute;bottom:12px;left:12px;z-index:70;color:#00ffcc;background:#101820dd;padding:8px 12px;border-radius:8px;display:none"></div>
+
+    <div id="level-cinematic-banner">
+        <div id="level-cinematic-title">Nivel 1</div>
+        <div id="level-cinematic-subtitle">Selva</div>
+    </div>
+
+    <div id="extralife-toast">¡VIDA EXTRA OBTENIDA! ❤️</div>
+
+    <div id="victory-screen" class="overlay">
+        <h1 style="color:#ffd700;">¡EXPEDICIÓN COMPLETADA!</h1>
+        <div class="subtitle">El Explorador Extremo ha conquistado los 11 niveles</div>
+        <div class="stats-summary">
+            <div>Tiempo Total Transcurrido: <span id="victory-time">00:00</span></div>
+            <div>Puntaje Final: <span id="victory-score">0</span> puntos</div>
+        </div>
+        <button class="btn" id="btn-victory-restart">Jugar de Nuevo</button>
+    </div>
+
+    <div id="menu-screen" class="overlay">
+        <h1>Explorador Extremo 3D</h1>
+        <div class="author-tag">Autor del Juego: Profesor Juan Neira</div>
+        <div class="subtitle">Aventuras en Laberintos 3D Dinámicos</div>
+        <button class="btn" id="btn-start">Jugar solo</button>
+        <div id="coop-menu" style="margin:16px auto;display:flex;gap:8px;justify-content:center;flex-wrap:wrap;max-width:460px">
+            <button class="btn" id="btn-create">Crear sala cooperativa</button>
+            <input id="room-code" inputmode="numeric" maxlength="6" placeholder="Código de 6 dígitos" aria-label="Código de sala" style="padding:10px;border-radius:8px;width:160px">
+            <button class="btn" id="btn-join">Unirse</button>
+        </div>
+        <div id="room-status" role="status" style="color:#00ffcc;margin:8px;font-weight:bold"></div>
+        <div class="instructions">
+            <strong>CONTROLES DE EXPEDICIÓN:</strong><br>
+            • Mover Explorador: <strong>Flechas del Teclado (Adaptado a la cámara)</strong><br>
+            • Disparar Rifle de Expedición: <strong>Barra Espaciadora</strong><br>
+            • Rotar Vista 360°: <strong>Mantener Click Izquierdo y arrastrar</strong><br>
+            • Zoom de Perspectiva: <strong>Rueda del Mouse (Scroll)</strong><br><br>
+            ¡Recorre los biomas evitando trampas y enemigos en caminos 3D!
+        </div>
+    </div>
+
+    <div id="game-over-screen" class="overlay">
+        <h1>¡FIN DEL JUEGO!</h1>
+        <div class="subtitle">El explorador ha caído ante los peligros del laberinto</div>
+        <div class="stats-summary">
+            <div>Tiempo Total Transcurrido: <span id="final-time">00:00</span></div>
+            <div>Puntaje Máximo Obtenido: <span id="final-score">0</span> puntos</div>
+        </div>
+        <button class="btn" id="btn-restart">Intentar de Nuevo</button>
+    </div>
+
+    <!-- NUEVO: overlay de control de vigencia de Testing -->
+    <div id="testing-finalizado-overlay">
+        <div>TESTING FINALIZADO</div>
+        <div class="subtitle-testing">El período de pruebas ha concluido</div>
+		<div class="subtitle-testing">Derechos Reservados Profesor Juan Neira</div>
+    </div>
+
+    <script>
+        // --- MOTOR DE TEXTURIZADO PROCEDURAL ---
+        const TextureGenerator = {
+            createNoise(ctx, width, height, amount) {
+                const imgData = ctx.getImageData(0, 0, width, height);
+                const data = imgData.data;
+                for (let i = 0; i < data.length; i += 4) {
+                    const noise = (Math.random() - 0.5) * amount;
+                    data[i] = Math.min(255, Math.max(0, data[i] + noise));
+                    data[i+1] = Math.min(255, Math.max(0, data[i+1] + noise));
+                    data[i+2] = Math.min(255, Math.max(0, data[i+2] + noise));
+                }
+                ctx.putImageData(imgData, 0, 0);
+            },
+
+            get(biome, type) {
+                const canvas = document.createElement('canvas');
+                canvas.width = 512;
+                canvas.height = 512;
+                const ctx = canvas.getContext('2d');
+
+                if (biome === 'Selva') {
+                    if (type === 'wall') {
+                        ctx.fillStyle = '#1b4332';
+                        ctx.fillRect(0, 0, 512, 512);
+                        for (let i = 0; i < 200; i++) {
+                            ctx.fillStyle = i % 2 === 0 ? '#2d6a4f' : '#40916c';
+                            ctx.beginPath();
+                            ctx.arc(Math.random()*512, Math.random()*512, 20 + Math.random()*30, 0, Math.PI*2);
+                            ctx.fill();
+                        }
+                        ctx.strokeStyle = '#52b788';
+                        ctx.lineWidth = 6;
+                        for (let i = 0; i < 6; i++) {
+                            ctx.beginPath();
+                            ctx.moveTo(Math.random()*512, 0);
+                            ctx.bezierCurveTo(Math.random()*512, 150, Math.random()*512, 350, Math.random()*512, 512);
+                            ctx.stroke();
+                        }
+                        this.createNoise(ctx, 512, 512, 25);
+                    } else {
+                        ctx.fillStyle = '#4f301f';
+                        ctx.fillRect(0, 0, 512, 512);
+                        for (let i = 0; i < 40; i++) {
+                            ctx.fillStyle = '#2d5a27';
+                            ctx.beginPath();
+                            ctx.ellipse(Math.random()*512, Math.random()*512, 40+Math.random()*50, 20+Math.random()*30, Math.random()*Math.PI, 0, Math.PI*2);
+                            ctx.fill();
+                        }
+                        this.createNoise(ctx, 512, 512, 35);
+                    }
+                } 
+                else if (biome === 'Montaña') {
+                    if (type === 'wall') {
+                        ctx.fillStyle = '#4a5568';
+                        ctx.fillRect(0, 0, 512, 512);
+                        ctx.strokeStyle = '#1a202c';
+                        ctx.lineWidth = 4;
+                        for (let i = 0; i < 15; i++) {
+                            ctx.beginPath();
+                            ctx.moveTo(Math.random()*512, Math.random()*512);
+                            ctx.lineTo(Math.random()*512, Math.random()*512);
+                            ctx.stroke();
+                        }
+                        let grad = ctx.createLinearGradient(0, 0, 0, 180);
+                        grad.addColorStop(0, '#ffffff');
+                        grad.addColorStop(1, 'rgba(255,255,255,0)');
+                        ctx.fillStyle = grad;
+                        ctx.fillRect(0, 0, 512, 250);
+                        this.createNoise(ctx, 512, 512, 40);
+                    } else {
+                        ctx.fillStyle = '#cbd5e0';
+                        ctx.fillRect(0, 0, 512, 512);
+                        for (let i = 0; i < 30; i++) {
+                            ctx.fillStyle = '#edf2f7';
+                            ctx.beginPath();
+                            ctx.arc(Math.random()*512, Math.random()*512, 30 + Math.random()*40, 0, Math.PI*2);
+                            ctx.fill();
+                        }
+                        this.createNoise(ctx, 512, 512, 15);
+                    }
+                } 
+                else if (biome === 'Desierto') {
+                    if (type === 'wall') {
+                        let grad = ctx.createLinearGradient(0, 0, 0, 512);
+                        grad.addColorStop(0, '#f4a261');
+                        grad.addColorStop(0.5, '#e76f51');
+                        grad.addColorStop(1, '#2a9d8f');
+                        ctx.fillStyle = grad;
+                        ctx.fillRect(0, 0, 512, 512);
+                        ctx.fillStyle = '#264653';
+                        for (let i = 0; i < 8; i++) {
+                            let cx = Math.random() * 512;
+                            let cy = 300 + Math.random() * 100;
+                            ctx.fillRect(cx, cy, 12, 120);
+                            ctx.fillRect(cx - 15, cy + 30, 40, 10);
+                            ctx.fillRect(cx - 15, cy + 10, 10, 20);
+                            ctx.fillRect(cx + 15, cy + 10, 10, 20);
+                        }
+                        this.createNoise(ctx, 512, 512, 20);
+                    } else {
+                        ctx.fillStyle = '#e9c46a';
+                        ctx.fillRect(0, 0, 512, 512);
+                        ctx.strokeStyle = '#f4a261';
+                        ctx.lineWidth = 10;
+                        for (let i = 0; i < 512; i += 30) {
+                            ctx.beginPath();
+                            for (let j = 0; j <= 512; j += 10) {
+                                let offset = Math.sin(j * 0.05) * 12;
+                                if (j === 0) ctx.moveTo(j, i + offset);
+                                else ctx.lineTo(j, i + offset);
+                            }
+                            ctx.stroke();
+                        }
+                        this.createNoise(ctx, 512, 512, 15);
+                    }
+                } 
+                else if (biome === 'Bosque') {
+                    if (type === 'wall') {
+                        ctx.fillStyle = '#3d2314';
+                        ctx.fillRect(0, 0, 512, 512);
+                        ctx.strokeStyle = '#24140a';
+                        ctx.lineWidth = 8;
+                        for (let i = 0; i < 512; i += 40) {
+                            ctx.beginPath();
+                            ctx.moveTo(i + (Math.random() - 0.5) * 20, 0);
+                            ctx.lineTo(i + (Math.random() - 0.5) * 20, 512);
+                            ctx.stroke();
+                        }
+                        for (let i = 0; i < 60; i++) {
+                            ctx.fillStyle = '#1b3a1a';
+                            ctx.beginPath();
+                            ctx.arc(Math.random()*512, Math.random()*512, 15+Math.random()*15, 0, Math.PI*2);
+                            ctx.fill();
+                        }
+                        this.createNoise(ctx, 512, 512, 30);
+                    } else {
+                        ctx.fillStyle = '#2b1a09';
+                        ctx.fillRect(0, 0, 512, 512);
+                        ctx.strokeStyle = '#5c4033';
+                        ctx.lineWidth = 3;
+                        for (let i = 0; i < 50; i++) {
+                            ctx.beginPath();
+                            ctx.moveTo(Math.random()*512, Math.random()*512);
+                            ctx.lineTo(Math.random()*512, Math.random()*512);
+                            ctx.stroke();
+                        }
+                        this.createNoise(ctx, 512, 512, 30);
+                    }
+                }
+                // --- NUEVOS BIOMAS NIVELES 7-11 ---
+                else if (biome === 'Egipto') {
+                    if (type === 'wall') {
+                        ctx.fillStyle = '#e8d9b0';
+                        ctx.fillRect(0, 0, 512, 512);
+                        ctx.strokeStyle = '#c9b481';
+                        ctx.lineWidth = 3;
+                        for (let i = 0; i < 512; i += 32) {
+                            ctx.beginPath(); ctx.moveTo(0, i); ctx.lineTo(512, i); ctx.stroke();
+                        }
+                        // Bloques de piedra caliza
+                        for (let row = 0; row < 16; row++) {
+                            let offset = (row % 2 === 0) ? 0 : 32;
+                            for (let col = -1; col < 8; col++) {
+                                ctx.strokeStyle = 'rgba(150,130,90,0.5)';
+                                ctx.strokeRect(offset + col*64, row*32, 64, 32);
+                            }
+                        }
+                        // Jeroglíficos dorados
+                        ctx.fillStyle = 'rgba(212,175,55,0.55)';
+                        for (let i = 0; i < 22; i++) {
+                            let gx = Math.random()*480+16, gy = Math.random()*480+16;
+                            ctx.fillRect(gx, gy, 10, 22);
+                            ctx.fillRect(gx-8, gy+8, 26, 6);
+                        }
+                        this.createNoise(ctx, 512, 512, 18);
+                    } else {
+                        ctx.fillStyle = '#d8c48f';
+                        ctx.fillRect(0, 0, 512, 512);
+                        for (let i = 0; i < 30; i++) {
+                            ctx.fillStyle = 'rgba(180,150,90,0.4)';
+                            ctx.beginPath();
+                            ctx.arc(Math.random()*512, Math.random()*512, 15+Math.random()*25, 0, Math.PI*2);
+                            ctx.fill();
+                        }
+                        this.createNoise(ctx, 512, 512, 20);
+                    }
+                }
+                else if (biome === 'Maya') {
+                    if (type === 'wall') {
+                        ctx.fillStyle = '#0b6e4f';
+                        ctx.fillRect(0, 0, 512, 512);
+                        for (let i = 0; i < 180; i++) {
+                            ctx.fillStyle = i % 2 === 0 ? '#0f9b6c' : '#065a3f';
+                            ctx.beginPath();
+                            ctx.arc(Math.random()*512, Math.random()*512, 12+Math.random()*22, 0, Math.PI*2);
+                            ctx.fill();
+                        }
+                        // Glifos mayas geométricos
+                        ctx.strokeStyle = 'rgba(255,215,150,0.5)';
+                        ctx.lineWidth = 4;
+                        for (let i = 0; i < 12; i++) {
+                            let gx = Math.random()*450+20, gy = Math.random()*450+20;
+                            ctx.strokeRect(gx, gy, 40, 40);
+                            ctx.beginPath(); ctx.moveTo(gx, gy); ctx.lineTo(gx+40, gy+40); ctx.stroke();
+                        }
+                        this.createNoise(ctx, 512, 512, 22);
+                    } else {
+                        ctx.fillStyle = '#0e5c40';
+                        ctx.fillRect(0, 0, 512, 512);
+                        for (let i = 0; i < 40; i++) {
+                            ctx.fillStyle = '#144d36';
+                            ctx.beginPath();
+                            ctx.ellipse(Math.random()*512, Math.random()*512, 30+Math.random()*40, 15+Math.random()*20, Math.random()*Math.PI, 0, Math.PI*2);
+                            ctx.fill();
+                        }
+                        this.createNoise(ctx, 512, 512, 25);
+                    }
+                }
+                else if (biome === 'Azteca') {
+                    if (type === 'wall') {
+                        ctx.fillStyle = '#2b2b2e';
+                        ctx.fillRect(0, 0, 512, 512);
+                        for (let i = 0; i < 220; i++) {
+                            ctx.fillStyle = i % 3 === 0 ? '#3d3d40' : '#1c1c1f';
+                            ctx.beginPath();
+                            ctx.arc(Math.random()*512, Math.random()*512, 6+Math.random()*14, 0, Math.PI*2);
+                            ctx.fill();
+                        }
+                        // Vetas de fuego/lava
+                        ctx.strokeStyle = 'rgba(255,90,20,0.6)';
+                        ctx.lineWidth = 5;
+                        for (let i = 0; i < 8; i++) {
+                            ctx.beginPath();
+                            ctx.moveTo(Math.random()*512, 0);
+                            ctx.bezierCurveTo(Math.random()*512, 170, Math.random()*512, 340, Math.random()*512, 512);
+                            ctx.stroke();
+                        }
+                        this.createNoise(ctx, 512, 512, 28);
+                    } else {
+                        ctx.fillStyle = '#26262a';
+                        ctx.fillRect(0, 0, 512, 512);
+                        for (let i = 0; i < 26; i++) {
+                            ctx.fillStyle = 'rgba(255,110,30,0.25)';
+                            ctx.beginPath();
+                            ctx.arc(Math.random()*512, Math.random()*512, 20+Math.random()*30, 0, Math.PI*2);
+                            ctx.fill();
+                        }
+                        this.createNoise(ctx, 512, 512, 22);
+                    }
+                }
+                else if (biome === 'ChinaFeudal') {
+                    if (type === 'wall') {
+                        ctx.fillStyle = '#7a2e2e';
+                        ctx.fillRect(0, 0, 512, 512);
+                        ctx.strokeStyle = '#4a1414';
+                        ctx.lineWidth = 6;
+                        for (let i = 0; i < 512; i += 46) {
+                            ctx.beginPath(); ctx.moveTo(i, 0); ctx.lineTo(i, 512); ctx.stroke();
+                        }
+                        ctx.strokeStyle = 'rgba(20,10,5,0.5)';
+                        ctx.lineWidth = 3;
+                        for (let i = 0; i < 512; i += 64) {
+                            ctx.beginPath(); ctx.moveTo(0, i); ctx.lineTo(512, i); ctx.stroke();
+                        }
+                        this.createNoise(ctx, 512, 512, 20);
+                    } else {
+                        ctx.fillStyle = '#5c3a21';
+                        ctx.fillRect(0, 0, 512, 512);
+                        ctx.strokeStyle = '#7a4d2a';
+                        ctx.lineWidth = 3;
+                        for (let i = 0; i < 512; i += 26) {
+                            ctx.beginPath(); ctx.moveTo(0, i); ctx.lineTo(512, i + (Math.random()-0.5)*8); ctx.stroke();
+                        }
+                        this.createNoise(ctx, 512, 512, 18);
+                    }
+                }
+                else if (biome === 'Grecia') {
+                    if (type === 'wall') {
+                        ctx.fillStyle = '#e8e6df';
+                        ctx.fillRect(0, 0, 512, 512);
+                        ctx.strokeStyle = 'rgba(150,150,145,0.5)';
+                        ctx.lineWidth = 2;
+                        for (let i = 0; i < 40; i++) {
+                            ctx.beginPath();
+                            ctx.moveTo(Math.random()*512, Math.random()*512);
+                            ctx.lineTo(Math.random()*512, Math.random()*512);
+                            ctx.stroke();
+                        }
+                        for (let i = 0; i < 6; i++) {
+                            ctx.fillStyle = 'rgba(200,200,195,0.6)';
+                            ctx.fillRect(Math.random()*470, 0, 30, 512);
+                        }
+                        this.createNoise(ctx, 512, 512, 14);
+                    } else {
+                        ctx.fillStyle = '#d6d3c8';
+                        ctx.fillRect(0, 0, 512, 512);
+                        for (let i = 0; i < 24; i++) {
+                            ctx.fillStyle = 'rgba(170,170,165,0.35)';
+                            ctx.beginPath();
+                            ctx.arc(Math.random()*512, Math.random()*512, 18+Math.random()*28, 0, Math.PI*2);
+                            ctx.fill();
+                        }
+                        this.createNoise(ctx, 512, 512, 12);
+                    }
+                }
+                else { // Fallback de seguridad
+                    ctx.fillStyle = '#3d2314';
+                    ctx.fillRect(0, 0, 512, 512);
+                    this.createNoise(ctx, 512, 512, 30);
+                }
+
+                const texture = new THREE.CanvasTexture(canvas);
+                texture.wrapS = THREE.RepeatWrapping;
+                texture.wrapT = THREE.RepeatWrapping;
+                if (type === 'wall') {
+                    texture.repeat.set(1, 1);
+                } else {
+                    texture.repeat.set(4, 4);
+                }
+                return texture;
+            }
+        };
+
+        // --- MOTOR DE AUDIO CON SÍNTESIS AMBIENTAL DINÁMICA ---
+        const AudioEngine = {
+            ctx: null,
+            ambientNodes: [],
+            init() {
+                if(!this.ctx) {
+                    this.ctx = new (window.AudioContext || window.webkitAudioContext)();
+                }
+            },
+            playCoin() {
+                if(!this.ctx) return;
+                let osc = this.ctx.createOscillator(), gain = this.ctx.createGain();
+                osc.type = 'sine'; osc.frequency.setValueAtTime(587.33, this.ctx.currentTime);
+                osc.frequency.setValueAtTime(880, this.ctx.currentTime + 0.1);
+                gain.gain.setValueAtTime(0.12, this.ctx.currentTime);
+                gain.gain.exponentialRampToValueAtTime(0.01, this.ctx.currentTime + 0.35);
+                osc.connect(gain); gain.connect(this.ctx.destination);
+                osc.start(); osc.stop(this.ctx.currentTime + 0.35);
+            },
+            playShoot() {
+                if(!this.ctx) return;
+                let osc = this.ctx.createOscillator(), gain = this.ctx.createGain();
+                osc.type = 'sawtooth'; 
+                osc.frequency.setValueAtTime(600, this.ctx.currentTime);
+                osc.frequency.exponentialRampToValueAtTime(60, this.ctx.currentTime + 0.12);
+                gain.gain.setValueAtTime(0.2, this.ctx.currentTime);
+                gain.gain.exponentialRampToValueAtTime(0.01, this.ctx.currentTime + 0.12);
+                osc.connect(gain); gain.connect(this.ctx.destination);
+                osc.start(); osc.stop(this.ctx.currentTime + 0.12);
+            },
+            playHit() {
+                if(!this.ctx) return;
+                let osc = this.ctx.createOscillator(), gain = this.ctx.createGain();
+                osc.type = 'square'; osc.frequency.setValueAtTime(140, this.ctx.currentTime);
+                osc.frequency.linearRampToValueAtTime(30, this.ctx.currentTime + 0.25);
+                gain.gain.setValueAtTime(0.25, this.ctx.currentTime);
+                gain.gain.exponentialRampToValueAtTime(0.01, this.ctx.currentTime + 0.25);
+                osc.connect(gain); gain.connect(this.ctx.destination);
+                osc.start(); osc.stop(this.ctx.currentTime + 0.25);
+            },
+            createNoiseBuffer() {
+                const bufferSize = 2 * this.ctx.sampleRate;
+                const noiseBuffer = this.ctx.createBuffer(1, bufferSize, this.ctx.sampleRate);
+                const output = noiseBuffer.getChannelData(0);
+                for (let i = 0; i < bufferSize; i++) {
+                    output[i] = Math.random() * 2 - 1;
+                }
+                return noiseBuffer;
+            },
+            stopAmbient() {
+                this.ambientNodes.forEach(node => {
+                    try { node.stop(); } catch(e) {}
+                });
+                this.ambientNodes = [];
+            },
+            playAmbient(biome) {
+                if(!this.ctx) return;
+                this.stopAmbient();
+
+                const mainGain = this.ctx.createGain();
+                mainGain.gain.setValueAtTime(0.1, this.ctx.currentTime);
+                mainGain.connect(this.ctx.destination);
+
+                if (biome === 'Selva') {
+                    let hum = this.ctx.createOscillator();
+                    hum.type = 'triangle'; hum.frequency.value = 65;
+                    let humGain = this.ctx.createGain(); humGain.gain.value = 0.04;
+                    hum.connect(humGain).connect(mainGain);
+                    hum.start(); this.ambientNodes.push(hum);
+                } else if (biome === 'Montaña') {
+                    let noiseSource = this.ctx.createBufferSource();
+                    noiseSource.buffer = this.createNoiseBuffer();
+                    noiseSource.loop = true;
+                    let windFilter = this.ctx.createBiquadFilter();
+                    windFilter.type = 'bandpass'; windFilter.Q.value = 3.5;
+                    let lfo = this.ctx.createOscillator(); lfo.frequency.value = 0.1;
+                    let lfoGain = this.ctx.createGain(); lfoGain.gain.value = 220;
+                    lfo.connect(lfoGain).connect(windFilter.frequency);
+                    noiseSource.connect(windFilter).connect(mainGain);
+                    lfo.start(); noiseSource.start();
+                    this.ambientNodes.push(lfo, noiseSource);
+                } else if (biome === 'Desierto') {
+                    let noiseSource = this.ctx.createBufferSource();
+                    noiseSource.buffer = this.createNoiseBuffer();
+                    noiseSource.loop = true;
+                    let desertFilter = this.ctx.createBiquadFilter();
+                    desertFilter.type = 'bandpass'; desertFilter.Q.value = 1.5;
+                    let lfo = this.ctx.createOscillator(); lfo.frequency.value = 0.15;
+                    let lfoGain = this.ctx.createGain(); lfoGain.gain.value = 180;
+                    lfo.connect(lfoGain).connect(desertFilter.frequency);
+                    noiseSource.connect(desertFilter).connect(mainGain);
+                    lfo.start(); noiseSource.start();
+                    this.ambientNodes.push(lfo, noiseSource);
+                } else if (biome === 'Bosque') {
+                    let drone1 = this.ctx.createOscillator(), drone2 = this.ctx.createOscillator();
+                    drone1.type = 'sawtooth'; drone1.frequency.value = 50;
+                    drone2.type = 'triangle'; drone2.frequency.value = 50.5;
+                    let lowpass = this.ctx.createBiquadFilter();
+                    lowpass.type = 'lowpass'; lowpass.frequency.value = 110;
+                    let droneGain = this.ctx.createGain(); droneGain.gain.value = 0.05;
+                    drone1.connect(lowpass); drone2.connect(lowpass);
+                    lowpass.connect(droneGain).connect(mainGain);
+                    drone1.start(); drone2.start();
+                    this.ambientNodes.push(drone1, drone2);
+                }
+                // --- AMBIENTES SONOROS NUEVOS NIVELES 7-11 ---
+                else if (biome === 'Egipto') {
+                    // Drone grave de cámara mortuoria + viento de arena tenue
+                    let drone = this.ctx.createOscillator();
+                    drone.type = 'sine'; drone.frequency.value = 72;
+                    let droneGain = this.ctx.createGain(); droneGain.gain.value = 0.06;
+                    let sand = this.ctx.createBufferSource();
+                    sand.buffer = this.createNoiseBuffer(); sand.loop = true;
+                    let sandFilter = this.ctx.createBiquadFilter();
+                    sandFilter.type = 'highpass'; sandFilter.frequency.value = 2200;
+                    let sandGain = this.ctx.createGain(); sandGain.gain.value = 0.015;
+                    drone.connect(droneGain).connect(mainGain);
+                    sand.connect(sandFilter).connect(sandGain).connect(mainGain);
+                    drone.start(); sand.start();
+                    this.ambientNodes.push(drone, sand);
+                }
+                else if (biome === 'Maya') {
+                    // Percusión ritual con flauta grave sintetizada + selva densa
+                    let flute = this.ctx.createOscillator();
+                    flute.type = 'sine'; flute.frequency.value = 220;
+                    let flGain = this.ctx.createGain(); flGain.gain.value = 0.035;
+                    let lfo = this.ctx.createOscillator(); lfo.frequency.value = 0.25;
+                    let lfoGain = this.ctx.createGain(); lfoGain.gain.value = 25;
+                    lfo.connect(lfoGain).connect(flute.frequency);
+                    let hum = this.ctx.createOscillator();
+                    hum.type = 'triangle'; hum.frequency.value = 60;
+                    let humGain = this.ctx.createGain(); humGain.gain.value = 0.04;
+                    flute.connect(flGain).connect(mainGain);
+                    hum.connect(humGain).connect(mainGain);
+                    flute.start(); lfo.start(); hum.start();
+                    this.ambientNodes.push(flute, lfo, hum);
+                }
+                else if (biome === 'Azteca') {
+                    // Tambores volcánicos graves con crepitar de fuego
+                    let lowDrum = this.ctx.createOscillator();
+                    lowDrum.type = 'square'; lowDrum.frequency.value = 45;
+                    let drumGain = this.ctx.createGain(); drumGain.gain.value = 0.045;
+                    let fire = this.ctx.createBufferSource();
+                    fire.buffer = this.createNoiseBuffer(); fire.loop = true;
+                    let fireFilter = this.ctx.createBiquadFilter();
+                    fireFilter.type = 'bandpass'; fireFilter.frequency.value = 800; fireFilter.Q.value = 0.8;
+                    let fireGain = this.ctx.createGain(); fireGain.gain.value = 0.03;
+                    lowDrum.connect(drumGain).connect(mainGain);
+                    fire.connect(fireFilter).connect(fireGain).connect(mainGain);
+                    lowDrum.start(); fire.start();
+                    this.ambientNodes.push(lowDrum, fire);
+                }
+                else if (biome === 'ChinaFeudal') {
+                    // Campanas y cuerdas orientales sintetizadas
+                    let bell = this.ctx.createOscillator();
+                    bell.type = 'sine'; bell.frequency.value = 330;
+                    let bellGain = this.ctx.createGain(); bellGain.gain.value = 0.025;
+                    let lfo = this.ctx.createOscillator(); lfo.frequency.value = 0.08;
+                    let lfoGain = this.ctx.createGain(); lfoGain.gain.value = 8;
+                    lfo.connect(lfoGain).connect(bell.frequency);
+                    let string_ = this.ctx.createOscillator();
+                    string_.type = 'triangle'; string_.frequency.value = 165;
+                    let stringGain = this.ctx.createGain(); stringGain.gain.value = 0.03;
+                    bell.connect(bellGain).connect(mainGain);
+                    string_.connect(stringGain).connect(mainGain);
+                    bell.start(); lfo.start(); string_.start();
+                    this.ambientNodes.push(bell, lfo, string_);
+                }
+                else if (biome === 'Grecia') {
+                    // Viento sobre mármol + coro de cuerdas graves de lira
+                    let wind = this.ctx.createBufferSource();
+                    wind.buffer = this.createNoiseBuffer(); wind.loop = true;
+                    let windFilter = this.ctx.createBiquadFilter();
+                    windFilter.type = 'bandpass'; windFilter.Q.value = 2.2;
+                    let lfo = this.ctx.createOscillator(); lfo.frequency.value = 0.12;
+                    let lfoGain = this.ctx.createGain(); lfoGain.gain.value = 260;
+                    lfo.connect(lfoGain).connect(windFilter.frequency);
+                    let windGain = this.ctx.createGain(); windGain.gain.value = 0.03;
+                    let lyre = this.ctx.createOscillator();
+                    lyre.type = 'sine'; lyre.frequency.value = 196;
+                    let lyreGain = this.ctx.createGain(); lyreGain.gain.value = 0.02;
+                    wind.connect(windFilter).connect(windGain).connect(mainGain);
+                    lyre.connect(lyreGain).connect(mainGain);
+                    lfo.start(); wind.start(); lyre.start();
+                    this.ambientNodes.push(lfo, wind, lyre);
+                }
+            }
+        };
+
+        // El anfitrión ejecuta la física; el invitado recibe instantáneas del mundo.
+        const Net = {
+            role: 'solo', channel: null, code: null, state: null, remote: null,
+            frame: 0, poseTimer: 0, hitTarget: null, starting: false, peerConnected: false, tracked: false, subscribed: false,
+            send(message) {
+                if (this.channel) this.channel.send({ type: 'broadcast', event: 'game', payload: message })
+                    .then(result => { if (result !== 'ok') console.warn('No se pudo enviar mensaje:', result); });
+            },
+            status(message) {
+                document.getElementById('room-status').textContent = message;
+                const online = document.getElementById('online-status');
+                online.textContent = message; online.style.display = this.role === 'solo' ? 'none' : 'block';
+            },
+            async connect(action, code) {
+                const cfg = window.EXPLORADOR_CONFIG;
+                if (!cfg?.url || !cfg?.publishableKey) return this.status('La conexión online aún no está configurada.');
+                if (this.channel) await this.client.removeChannel(this.channel);
+                this.client ||= window.createSupabaseClient(cfg.url, cfg.publishableKey);
+                this.role = action === 'create' ? 'host' : 'guest';
+                this.code = action === 'create' ? String(crypto.getRandomValues(new Uint32Array(1))[0] % 900000 + 100000) : String(code);
+                if (!/^\d{6}$/.test(this.code)) { this.role = 'solo'; return this.status('Escribe un código de seis dígitos.'); }
+                this.peerConnected = false; this.tracked = false; this.subscribed = false;
+                this.channel = this.client.channel('explorador:' + this.code, {
+                    config: { broadcast: { self: false }, presence: { key: crypto.randomUUID() } }
+                });
+                this.channel
+                    .on('broadcast', { event: 'game' }, ({ payload }) => this.handleMessage(payload))
+                    .on('presence', { event: 'sync' }, () => this.syncPresence())
+                    .subscribe(async status => {
+                        if (status === 'SUBSCRIBED') {
+                            this.subscribed = true;
+                            if (this.role === 'host') {
+                                this.tracked = true; await this.channel.track({ role: 'host' });
+                                this.status('Sala ' + this.code + ' · comparte este código y espera al otro jugador.');
+                            }
+                        } else if (status === 'CHANNEL_ERROR' || status === 'TIMED_OUT') {
+                            this.status('No se pudo conectar a Supabase.');
+                        }
+                    });
+            },
+            async syncPresence() {
+                if (!this.channel || !this.subscribed || this.role === 'solo') return;
+                const participants = Object.values(this.channel.presenceState()).flat();
+                const hosts = participants.filter(p => p.role === 'host');
+                const guests = participants.filter(p => p.role === 'guest');
+                if (!this.tracked && this.role === 'guest') {
+                    if (!hosts.length || guests.length) {
+                        this.status(!hosts.length ? 'No hay anfitrión en esa sala.' : 'La sala ya tiene dos jugadores.');
+                        const oldChannel = this.channel;
+                        this.channel = null; this.role = 'solo';
+                        await this.client.removeChannel(oldChannel);
+                        return;
+                    }
+                    this.tracked = true; await this.channel.track({ role: 'guest' });
+                    this.status('Sala ' + this.code + ' · esperando al anfitrión.');
+                    this.send({ type: 'hello' });
+                    return;
+                }
+                if (this.role === 'host' && hosts.length > 1) {
+                    this.status('El código ya está en uso. Crea otra sala.');
+                    const oldChannel = this.channel;
+                    this.channel = null; this.role = 'solo';
+                    await this.client.removeChannel(oldChannel);
+                    return;
+                }
+                if (this.role === 'host' && guests.length === 1 && !this.peerConnected) {
+                    this.peerConnected = true;
+                    this.status('Sala ' + this.code + ' · invitado conectado. ¡Comienza la partida!');
+                    this.makeRemote();
+                    if (!Game.isReady) document.getElementById('btn-start').click();
+                    else { this.send({ type: 'start' }); this.frame = 1; this.sendState(0); }
+                } else if (this.role === 'host' && !guests.length) {
+                    this.peerConnected = false;
+                    if (this.remote) { this.remote.removeFromParent(); this.remote = null; }
+                    this.status('Sala ' + this.code + ' · esperando al otro jugador.');
+                } else if (this.role === 'guest' && this.tracked && !hosts.length) {
+                    this.status('El anfitrión se desconectó. Recarga para crear otra sala.');
+                    this.role = 'solo';
+                }
+            },
+            handleMessage(msg) {
+                if (!msg || typeof msg.type !== 'string') return;
+                if (msg.type === 'hello' && this.role === 'host' && Game.isReady) { this.frame = 1; this.sendState(0); }
+                else if (msg.type === 'start' && this.role === 'guest' && !Game.isReady)
+                    document.getElementById('btn-start').click();
+                else if (msg.type === 'state' && this.role === 'guest' && msg.state) {
+                    this.state = msg.state; this.applyState(msg.state);
+                } else if (msg.type === 'pose' && this.role === 'host' && [msg.x,msg.z,msg.angle].every(Number.isFinite))
+                    this.applyPose(msg);
+                else if (msg.type === 'shoot' && this.role === 'host' && this.remote && Game.isReady)
+                    fireArrow(this.remote);
+            },
+            makeRemote() {
+                if (this.role !== 'host' || !playerMesh || this.remote) return;
+                this.remote = playerMesh.clone(true);
+                this.remote.traverse(obj => { if (obj.isMesh) { obj.material = obj.material.clone(); obj.material.color?.multiplyScalar(1.4); } });
+                this.remote.position.set(Game.cellSize, 0, Game.cellSize);
+                scene.add(this.remote);
+            },
+            applyPose(pose) {
+                if (!this.remote || !Game.isReady) return;
+                const elapsed = Math.min(0.25, (performance.now() - (this.lastPose || performance.now())) / 1000);
+                this.lastPose = performance.now();
+                const distance = Math.hypot(pose.x - this.remote.position.x, pose.z - this.remote.position.z);
+                if (distance > 3 + elapsed * 12 || checkMazeCollision(pose.x, pose.z)) return;
+                this.remote.position.set(pose.x, 0, pose.z); this.remote.rotation.y = pose.angle;
+            },
+            sendPose(delta) {
+                this.poseTimer += delta;
+                if (this.poseTimer < 0.05) return;
+                this.poseTimer = 0;
+                this.send({ type: 'pose', x: playerMesh.position.x, z: playerMesh.position.z, angle: playerMesh.rotation.y });
+            },
+            sendState(delta) {
+                this.frame += delta;
+                if (this.frame < 0.1) return;
+                this.frame = 0;
+                const layout = [
+                    ...Game.prizes.map(p => ({ kind: 'prize', x: p.x, z: p.z, points: p.points })),
+                    ...Game.enemies.map(e => ({ kind: 'enemy', x: e.x, z: e.z })),
+                    ...Game.traps.map(t => ({ kind: 'trap', x: t.x, z: t.z }))
+                ];
+                this.send({ type: 'state', state: {
+                    level: Game.level, maze: Game.maze, layout,
+                    enemies: Game.enemies.map(e => ({ x: e.x, z: e.z, px: e.mesh.position.x, pz: e.mesh.position.z })),
+                    prizes: Game.prizes.map(p => ({ x: p.x, z: p.z })),
+                    shots: Game.arrows.map(a => ({ x: a.mesh.position.x, y: a.mesh.position.y, z: a.mesh.position.z })),
+                    enemyShots: Game.enemyProjectiles.map(a => ({ x: a.mesh.position.x, y: a.mesh.position.y, z: a.mesh.position.z })),
+                    player: { x: playerMesh.position.x, z: playerMesh.position.z, angle: playerMesh.rotation.y },
+                    guest: this.remote ? { x: this.remote.position.x, z: this.remote.position.z } : null,
+                    score: Game.score, lives: Game.lives, time: Game.time,
+                    progress: Game.scoreAccumulatorForExtraLife, gameOver: Game.gameOver
+                }});
+            },
+            applyState(state) {
+                if (!Game.isReady) {
+                    if (Game.gameOver && !state.gameOver) {
+                        document.getElementById('game-over-screen').style.display = 'none';
+                        document.getElementById('victory-screen').style.display = 'none';
+                        resetGameGlobal();
+                    } else if (!state.gameOver && this.role === 'guest') document.getElementById('btn-start').click();
+                    return;
+                }
+                if (state.level !== Game.level || !this.readyLevel) {
+                    Game.level = state.level; startNewLevel(); this.readyLevel = state.level;
+                }
+                if (!this.remote) {
+                    this.remote = playerMesh.clone(true);
+                    this.remote.traverse(obj => { if (obj.isMesh) { obj.material = obj.material.clone(); obj.material.color?.multiplyScalar(1.4); } });
+                    scene.add(this.remote);
+                }
+                this.remote.position.set(state.player.x, 0, state.player.z);
+                this.remote.rotation.y = state.player.angle;
+                if (state.guest && Math.hypot(playerMesh.position.x - state.guest.x, playerMesh.position.z - state.guest.z) > 2) {
+                    playerMesh.position.set(state.guest.x, 0, state.guest.z);
+                }
+                Game.score = state.score; Game.lives = state.lives; Game.time = state.time;
+                Game.scoreAccumulatorForExtraLife = state.progress;
+                updateHUD();
+                document.getElementById('hud-time').textContent = formatTime(state.time);
+                for (let i = Game.prizes.length - 1; i >= 0; i--) {
+                    const p = Game.prizes[i];
+                    if (!state.prizes.some(q => q.x === p.x && q.z === p.z)) {
+                        mazeGroup.remove(p.mesh); Game.prizes.splice(i, 1);
+                    }
+                }
+                for (let i = Game.enemies.length - 1; i >= 0; i--) {
+                    const e = Game.enemies[i];
+                    const authoritative = state.enemies.find(q => q.x === e.x && q.z === e.z);
+                    if (!authoritative) { mazeGroup.remove(e.mesh); Game.enemies.splice(i, 1); }
+                    else e.mesh.position.set(authoritative.px, 0, authoritative.pz);
+                }
+                if (!this.shotGroup) {
+                    this.shotGroup = new THREE.Group(); scene.add(this.shotGroup);
+                    this.shotGeometry = new THREE.SphereGeometry(0.12, 8, 6);
+                    this.playerShotMaterial = new THREE.MeshBasicMaterial({ color: 0xffea00 });
+                    this.enemyShotMaterial = new THREE.MeshBasicMaterial({ color: 0xff4444 });
+                }
+                this.shotGroup.clear();
+                for (const shot of state.shots || []) {
+                    const mesh = new THREE.Mesh(this.shotGeometry, this.playerShotMaterial);
+                    mesh.position.set(shot.x, shot.y, shot.z); this.shotGroup.add(mesh);
+                }
+                for (const shot of state.enemyShots || []) {
+                    const mesh = new THREE.Mesh(this.shotGeometry, this.enemyShotMaterial);
+                    mesh.position.set(shot.x, shot.y, shot.z); this.shotGroup.add(mesh);
+                }
+                if (state.gameOver && !Game.gameOver) endGame();
+                if (state.gameOver && state.level > 11) {
+                    document.getElementById('victory-time').textContent = formatTime(state.time);
+                    document.getElementById('victory-score').textContent = state.score;
+                }
+            }
+        };
+        document.getElementById('btn-create').onclick = () => Net.connect('create');
+        document.getElementById('btn-join').onclick = () => Net.connect('join', document.getElementById('room-code').value.trim());
+
+        // --- ESTADO Y CONFIGURACIÓN GLOBAL ---
+        const playerHeight = 1.7; // Altura exacta de la entidad explorador extremo
+        
+        const Game = {
+            score: 0,
+            lives: 3,
+            level: 1,
+            time: 0,
+            survivalTimer: 0,
+            scoreAccumulatorForExtraLife: 0,
+            gridSize: 15,
+            cellSize: 4,
+            wallWidth: 2.0,  // Reducido a la mitad (0.5x del valor celda original 4.0)
+            wallHeight: playerHeight * 2.0, // Exactamente 2x el alto del explorador (3.4)
+            playerRadius: 0.5, // Radio de colisión optimizado para muros más delgados
+            maze: [],
+            enemies: [],
+            prizes: [],
+            arrows: [],
+            biomes: ['Selva', 'Montaña', 'Desierto', 'Bosque'],
+            currentBiome: 'Selva',
+            keys: { ArrowUp: false, ArrowDown: false, ArrowLeft: false, ArrowRight: false },
+            isReady: false,
+            gameOver: false,
+            clock: new THREE.Clock(),
+            animTimer: 0,
+            // --- NUEVO: umbral de vida extra ajustado de 20000 a 15000 ---
+            extraLifeThreshold: 15000,
+            // --- NUEVO: sistemas exclusivos de niveles 7-11 ---
+            traps: [],
+            enemyProjectiles: [],
+            portalTowers: [],
+            cinematic: { active: false, elapsed: 0, duration: 5.2, centerX: 0, centerZ: 0 },
+            cameraOrbit: {
+                radius: 16,
+                minRadius: 6,
+                maxRadius: 35,
+                theta: 0,
+                phi: Math.PI / 3, // Ángulo cinemático fijado a 30° desde la horizontal (60° de elevación zenital)
+                isDragging: false,
+                prevMouseX: 0,
+                prevMouseY: 0
+            }
+        };
+
+        const BiomeConfigs = {
+            'Selva': { fogColor: 0x081c15 },
+            'Montaña': { fogColor: 0x1e293b },
+            'Desierto': { fogColor: 0x6f4e37 },
+            'Bosque': { fogColor: 0x0a2f1d },
+            // --- NUEVOS BIOMAS NIVELES 7-11 ---
+            'Egipto': { fogColor: 0x8a7a4a },
+            'Maya': { fogColor: 0x0a3d2a },
+            'Azteca': { fogColor: 0x1a0f0a },
+            'ChinaFeudal': { fogColor: 0x3a1414 },
+            'Grecia': { fogColor: 0x9a9488 }
+        };
+
+        // --- CONFIGURACIÓN DE NIVELES 7-11: bioma, torre-portal y trampa por nivel ---
+        const NewLevelConfig = {
+            7:  { biome: 'Egipto',      label: 'Pirámides Egipcias',   portalColor: 0xd4af37, portalMat: 'gold',   trapType: 'estaca',   enemyType: 'Momia',           weapon: 'lanza' },
+            8:  { biome: 'Maya',        label: 'Pirámides Mayas',      portalColor: 0x00c896, portalMat: 'jade',   trapType: 'pendulo',  enemyType: 'GuerreroJaguar',  weapon: 'dardo' },
+            9:  { biome: 'Azteca',      label: 'Pirámides Aztecas',    portalColor: 0xff4500, portalMat: 'basalto',trapType: 'geiser',   enemyType: 'GuerreroAguila',  weapon: 'cuchillo' },
+            10: { biome: 'ChinaFeudal', label: 'Ciudad China Feudal',  portalColor: 0x8a2be2, portalMat: 'madera', trapType: 'makibishi',enemyType: 'NinjaSombra',     weapon: 'shuriken' },
+            11: { biome: 'Grecia',      label: 'Ciudad Griega Antigua',portalColor: 0x66ccff, portalMat: 'marmol', trapType: 'columna',  enemyType: 'Minotauro',       weapon: 'jabalina' }
+        };
+
+        // Colores de portal para los niveles 1-6 (Hitos, no altera mecánica ni biomas existentes)
+        const ClassicPortalColors = {
+            'Selva': 0x2ecc71, 'Montaña': 0xaeefff, 'Desierto': 0xffb347, 'Bosque': 0xd2691e
+        };
+
+        function getBiomeForLevel(level) {
+            if (level <= 6) return Game.biomes[(level - 1) % Game.biomes.length];
+            return NewLevelConfig[level] ? NewLevelConfig[level].biome : Game.biomes[(level - 1) % Game.biomes.length];
+        }
+
+        // --- THREE.JS RENDER & ESCENA ---
+        let scene, camera, renderer, playerMesh;
+        const container = document.getElementById('canvas-container');
+
+        let playerLegL, playerLegR, playerArmL, playerArmR, playerHat, playerHead, rifleMesh;
+
+        function init3D() {
+            scene = new THREE.Scene();
+            camera = new THREE.PerspectiveCamera(60, window.innerWidth / window.innerHeight, 0.1, 1000);
+            
+            renderer = new THREE.WebGLRenderer({ antialias: true });
+            renderer.setSize(window.innerWidth, window.innerHeight);
+            renderer.shadowMap.enabled = true;
+            renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+            container.appendChild(renderer.domElement);
+
+            let ambientLight = new THREE.AmbientLight(0xffffff, 0.65);
+            scene.add(ambientLight);
+
+            let dirLight = new THREE.DirectionalLight(0xfffdd0, 0.95);
+            dirLight.position.set(25, 45, 25);
+            dirLight.castShadow = true;
+            dirLight.shadow.mapSize.width = 1024;
+            dirLight.shadow.mapSize.height = 1024;
+            dirLight.shadow.camera.near = 0.5;
+            dirLight.shadow.camera.far = 150;
+            let d = 40;
+            dirLight.shadow.camera.left = -d; dirLight.shadow.camera.right = d;
+            dirLight.shadow.camera.top = d; dirLight.shadow.camera.bottom = -d;
+            scene.add(dirLight);
+
+            window.addEventListener('resize', onWindowResize, false);
+            setupMouseInteractions();
+        }
+
+        function onWindowResize() {
+            camera.aspect = window.innerWidth / window.innerHeight;
+            camera.updateProjectionMatrix();
+            renderer.setSize(window.innerWidth, window.innerHeight);
+        }
+
+        function setupMouseInteractions() {
+            container.addEventListener('mousedown', (e) => {
+                if(!Game.isReady || Game.gameOver) return;
+                Game.cameraOrbit.isDragging = true;
+                Game.cameraOrbit.prevMouseX = e.clientX;
+                Game.cameraOrbit.prevMouseY = e.clientY;
+            });
+
+            window.addEventListener('mousemove', (e) => {
+                if (!Game.cameraOrbit.isDragging) return;
+
+                let deltaX = e.clientX - Game.cameraOrbit.prevMouseX;
+                let deltaY = e.clientY - Game.cameraOrbit.prevMouseY;
+
+                Game.cameraOrbit.prevMouseX = e.clientX;
+                Game.cameraOrbit.prevMouseY = e.clientY;
+
+                Game.cameraOrbit.theta -= deltaX * 0.007;
+                Game.cameraOrbit.phi -= deltaY * 0.007;
+                Game.cameraOrbit.phi = Math.max(0.2, Math.min(Math.PI / 2.05, Game.cameraOrbit.phi));
+            });
+
+            window.addEventListener('mouseup', () => {
+                Game.cameraOrbit.isDragging = false;
+            });
+
+            container.addEventListener('wheel', (e) => {
+                if (!Game.isReady || Game.gameOver) return;
+                e.preventDefault();
+                let zoomIntensity = e.deltaY * 0.015;
+                Game.cameraOrbit.radius += zoomIntensity;
+                Game.cameraOrbit.radius = Math.max(Game.cameraOrbit.minRadius, Math.min(Game.cameraOrbit.maxRadius, Game.cameraOrbit.radius));
+            }, { passive: false });
+        }
+
+        // --- ALGORITMO DE LABERINTO ---
+        function generateMaze(size) {
+            let matrix = [];
+            for (let x = 0; x < size; x++) {
+                matrix[x] = [];
+                for (let y = 0; y < size; y++) matrix[x][y] = 1;
+            }
+
+            let stack = [];
+            let current = { x: 1, y: 1 };
+            matrix[current.x][current.y] = 0;
+
+            do {
+                let neighbors = [];
+                let dirs = [{x:0, y:-2}, {x:0, y:2}, {x:-2, y:0}, {x:2, y:0}];
+                
+                for(let d of dirs) {
+                    let nx = current.x + d.x, ny = current.y + d.y;
+                    if(nx > 0 && nx < size-1 && ny > 0 && ny < size-1 && matrix[nx][ny] === 1) {
+                        neighbors.push({nx, ny, wallX: current.x + d.x/2, wallY: current.y + d.y/2});
+                    }
+                }
+
+                if(neighbors.length > 0) {
+                    let next = neighbors[Math.floor(Math.random() * neighbors.length)];
+                    matrix[next.wallX][next.wallY] = 0;
+                    matrix[next.nx][next.ny] = 0;
+                    stack.push(current);
+                    current = { x: next.nx, y: next.ny };
+                } else {
+                    current = stack.pop();
+                }
+            } while(stack.length > 0);
+
+            matrix[1][2] = 0; matrix[2][1] = 0;
+            return matrix;
+        }
+
+        // --- CONSTRUCCIÓN VISUAL DEL ESCENARIO 3D CON MUROS ANCHURA 0.5X Y ALTURA 2X ---
+        let mazeGroup = new THREE.Group();
+
+        function buildVisualMaze() {
+            if (!scene.getObjectById(mazeGroup.id)) {
+                scene.add(mazeGroup);
+            }
+
+            while(mazeGroup.children.length > 0){
+                mazeGroup.remove(mazeGroup.children[0]);
+            }
+            Game.prizes = [];
+            Game.enemies = [];
+            Game.arrows = [];
+            Game.traps = [];
+            Game.enemyProjectiles = [];
+            Game.portalTowers = [];
+
+            let conf = BiomeConfigs[Game.currentBiome];
+            scene.background = new THREE.Color(conf.fogColor);
+            scene.fog = new THREE.FogExp2(conf.fogColor, 0.018);
+
+            let wallTexture = TextureGenerator.get(Game.currentBiome, 'wall');
+            let floorTexture = TextureGenerator.get(Game.currentBiome, 'floor');
+
+            // Geometría del muro: Ancho 0.5x de la celda, alto 2x del explorador
+            let wallGeo = new THREE.BoxGeometry(Game.wallWidth, Game.wallHeight, Game.wallWidth);
+            let wallMat = new THREE.MeshStandardMaterial({ map: wallTexture, roughness: 0.8, metalness: 0.05 });
+            
+            let floorGeo = new THREE.PlaneGeometry(Game.gridSize * Game.cellSize, Game.gridSize * Game.cellSize);
+            let floorMat = new THREE.MeshStandardMaterial({ map: floorTexture, roughness: 0.9, metalness: 0.0 });
+
+            let floor = new THREE.Mesh(floorGeo, floorMat);
+            floor.rotation.x = -Math.PI / 2;
+            floor.position.set((Game.gridSize*Game.cellSize)/2 - Game.cellSize/2, 0, (Game.gridSize*Game.cellSize)/2 - Game.cellSize/2);
+            floor.receiveShadow = true;
+            mazeGroup.add(floor);
+
+            for(let x=0; x<Game.gridSize; x++) {
+                for(let z=0; z<Game.gridSize; z++) {
+                    let posX = x * Game.cellSize;
+                    let posZ = z * Game.cellSize;
+
+                    if(Game.maze[x][z] === 1) {
+                        let wall = new THREE.Mesh(wallGeo, wallMat);
+                        wall.position.set(posX, Game.wallHeight / 2, posZ);
+                        wall.castShadow = true;
+                        wall.receiveShadow = true;
+                        mazeGroup.add(wall);
+                    } else {
+                        // Celdas de Hitos (inicio y meta) reservadas para las Torres-Portal
+                        let isStartCell = (x === 1 && z === 1);
+                        let isGoalCell = (x === Game.gridSize - 2 && z === Game.gridSize - 2);
+                        if(isStartCell || isGoalCell) continue;
+
+                        // Mayor densidad de premios en niveles 7-11 (gemas místicas)
+                        let prizeChance = Game.level >= 7 ? 0.17 : 0.12;
+                        let layout = Net.role === 'guest' ? Net.state?.layout?.find(item => item.x === posX && item.z === posZ) : null;
+                        let rand = Net.role === 'guest' ? -1 : Math.random();
+                        if (layout?.kind === 'prize') {
+                            spawnPrize(posX, posZ, layout.points);
+                        } else if (layout?.kind === 'enemy') {
+                            spawnEnemy(posX, posZ);
+                        } else if (layout?.kind === 'trap') {
+                            spawnTrap(posX, posZ, Game.level);
+                        } else if(rand < prizeChance) {
+                            spawnPrize(posX, posZ);
+                        } else if(rand > 0.95 && Game.enemies.length < (2 + Game.level)) {
+                            spawnEnemy(posX, posZ);
+                        } else if(Game.level >= 7 && rand > 0.90 && rand <= 0.95) {
+                            // Trampas ambientales solo en niveles 7-11, en celdas libres, nunca en inicio/meta
+                            spawnTrap(posX, posZ, Game.level);
+                        }
+                    }
+                }
+            }
+
+            if(Game.enemies.length === 0 && Net.role !== 'guest') spawnEnemy((Game.gridSize-2)*Game.cellSize, (Game.gridSize-2)*Game.cellSize);
+
+            // --- NUEVO: Torres-Portal de inicio y meta en todos los niveles (1 al 11) ---
+            createPortalTower(1 * Game.cellSize, 1 * Game.cellSize, true, Game.level);
+            createPortalTower((Game.gridSize-2) * Game.cellSize, (Game.gridSize-2) * Game.cellSize, false, Game.level);
+        }
+
+        function spawnPrize(x, z, forcedPoints) {
+            let rand = forcedPoints === 2500 ? 0.9 : forcedPoints === 3000 ? 0.9 : forcedPoints === 2000 ? 0.6 : forcedPoints === 1000 ? 0.2 : Math.random();
+            let type = 'diamond', color = 0x00ffff, pts = 1000, scale = 0.4;
+            let geo = new THREE.OctahedronGeometry(scale, 0);
+
+            // --- NUEVO: Gema Mística exclusiva de niveles 7-11, 2500 pts, mayor densidad ---
+            if (Game.level >= 7 && rand > 0.55) {
+                let gemColor = (NewLevelConfig[Game.level] && NewLevelConfig[Game.level].portalColor) || 0xff00ff;
+                let mat = new THREE.MeshStandardMaterial({ color: gemColor, metalness: 0.5, roughness: 0.1, emissive: gemColor, emissiveIntensity: 0.55, transparent: true, opacity: 0.92 });
+                let gemGeo = new THREE.DodecahedronGeometry(0.38, 0);
+                let mesh = new THREE.Mesh(gemGeo, mat);
+                mesh.position.set(x, 0.85, z);
+                mesh.castShadow = true;
+                let halo = new THREE.Mesh(new THREE.TorusGeometry(0.5, 0.025, 8, 20), new THREE.MeshBasicMaterial({ color: gemColor, transparent: true, opacity: 0.6 }));
+                halo.rotation.x = Math.PI / 2;
+                mesh.add(halo);
+                mazeGroup.add(mesh);
+                Game.prizes.push({ mesh, type: 'mystic_gem', points: 2500, x, z, halo });
+                return;
+            }
+
+            if(rand > 0.4 && rand <= 0.8) {
+                type = 'gold'; color = 0xffd700; pts = 2000; scale = 0.35;
+                geo = new THREE.CylinderGeometry(scale, scale, 0.1, 12);
+            } else if(rand > 0.8) {
+                type = 'star'; color = 0xff00ff; pts = 3000; scale = 0.4;
+                geo = new THREE.IcosahedronGeometry(scale, 0);
+            }
+
+            let mat = new THREE.MeshStandardMaterial({ color: color, metalness: 0.8, roughness: 0.2, emissive: color, emissiveIntensity: 0.25 });
+            let mesh = new THREE.Mesh(geo, mat);
+            mesh.position.set(x, 0.8, z);
+            if(type==='gold') mesh.rotation.x = Math.PI/2;
+            mesh.castShadow = true;
+            mazeGroup.add(mesh);
+            Game.prizes.push({ mesh, type, points: pts, x, z });
+        }
+
+        // --- FABRICA SENIOR DE ENEMIGOS DIFERENCIADOS EN MODELADO 3D ---
+        function createEnemyModel(type) {
+            let group = new THREE.Group();
+
+            if (type === 'León') {
+                // Cuerpo felino
+                let bodyMat = new THREE.MeshStandardMaterial({ color: 0xd4a373, roughness: 0.6 });
+                let maneMat = new THREE.MeshStandardMaterial({ color: 0x8c4a27, roughness: 0.8 });
+                
+                let body = new THREE.Mesh(new THREE.BoxGeometry(0.7, 0.6, 1.1), bodyMat);
+                body.position.y = 0.45;
+                group.add(body);
+
+                let head = new THREE.Mesh(new THREE.BoxGeometry(0.55, 0.5, 0.55), bodyMat);
+                head.position.set(0, 0.75, 0.45);
+                group.add(head);
+
+                let mane = new THREE.Mesh(new THREE.CylinderGeometry(0.48, 0.48, 0.35, 10), maneMat);
+                mane.rotation.x = Math.PI / 2;
+                mane.position.set(0, 0.75, 0.35);
+                group.add(mane);
+
+                let snout = new THREE.Mesh(new THREE.BoxGeometry(0.3, 0.2, 0.25), bodyMat);
+                snout.position.set(0, 0.65, 0.75);
+                group.add(snout);
+
+                let eyeMat = new THREE.MeshBasicMaterial({ color: 0xff0000 });
+                let eyeL = new THREE.Mesh(new THREE.BoxGeometry(0.1, 0.1, 0.05), eyeMat);
+                eyeL.position.set(-0.16, 0.82, 0.73);
+                let eyeR = eyeL.clone();
+                eyeR.position.x = 0.16;
+                group.add(eyeL, eyeR);
+
+            } else if (type === 'Fantasma') {
+                // Manto espectral flotante
+                let ghostMat = new THREE.MeshStandardMaterial({ color: 0xe0e7ff, transparent: true, opacity: 0.82, roughness: 0.2, emissive: 0x4338ca, emissiveIntensity: 0.3 });
+                
+                let head = new THREE.Mesh(new THREE.SphereGeometry(0.45, 12, 12), ghostMat);
+                head.position.y = 0.9;
+                group.add(head);
+
+                let skirt = new THREE.Mesh(new THREE.ConeGeometry(0.5, 0.9, 12, 1, true), ghostMat);
+                skirt.rotation.x = Math.PI;
+                skirt.position.y = 0.45;
+                group.add(skirt);
+
+                let eyeMat = new THREE.MeshBasicMaterial({ color: 0x00ffff });
+                let eyeL = new THREE.Mesh(new THREE.SphereGeometry(0.08, 8, 8), eyeMat);
+                eyeL.position.set(-0.15, 0.95, 0.38);
+                let eyeR = eyeL.clone();
+                eyeR.position.x = 0.15;
+                group.add(eyeL, eyeR);
+
+            } else if (type === 'Robot') {
+                // Estructura robótica industrial
+                let metalMat = new THREE.MeshStandardMaterial({ color: 0x64748b, metalness: 0.8, roughness: 0.2 });
+                let jointMat = new THREE.MeshStandardMaterial({ color: 0x334155, metalness: 0.9, roughness: 0.3 });
+                let visorMat = new THREE.MeshBasicMaterial({ color: 0xff0055 });
+
+                let body = new THREE.Mesh(new THREE.BoxGeometry(0.75, 0.7, 0.6), metalMat);
+                body.position.y = 0.55;
+                group.add(body);
+
+                let head = new THREE.Mesh(new THREE.BoxGeometry(0.45, 0.38, 0.4), metalMat);
+                head.position.set(0, 1.05, 0);
+                group.add(head);
+
+                let visor = new THREE.Mesh(new THREE.BoxGeometry(0.36, 0.1, 0.08), visorMat);
+                visor.position.set(0, 1.08, 0.2);
+                group.add(visor);
+
+                let antenna = new THREE.Mesh(new THREE.CylinderGeometry(0.02, 0.02, 0.3), jointMat);
+                antenna.position.set(0, 1.35, 0);
+                let antTip = new THREE.Mesh(new THREE.SphereGeometry(0.06), visorMat);
+                antTip.position.set(0, 1.5, 0);
+                group.add(antenna, antTip);
+
+            } else if (type === 'Perro') {
+                // Perro de cazador 3D
+                let dogMat = new THREE.MeshStandardMaterial({ color: 0x6d4c41, roughness: 0.7 });
+                let darkMat = new THREE.MeshStandardMaterial({ color: 0x3e2723, roughness: 0.8 });
+
+                let body = new THREE.Mesh(new THREE.BoxGeometry(0.5, 0.45, 0.9), dogMat);
+                body.position.y = 0.35;
+                group.add(body);
+
+                let head = new THREE.Mesh(new THREE.BoxGeometry(0.38, 0.35, 0.4), dogMat);
+                head.position.set(0, 0.6, 0.45);
+                group.add(head);
+
+                let snout = new THREE.Mesh(new THREE.BoxGeometry(0.22, 0.18, 0.3), darkMat);
+                snout.position.set(0, 0.52, 0.68);
+                group.add(snout);
+
+                let earL = new THREE.Mesh(new THREE.BoxGeometry(0.1, 0.25, 0.12), darkMat);
+                earL.position.set(-0.22, 0.58, 0.42);
+                let earR = earL.clone(); earR.position.x = 0.22;
+                group.add(earL, earR);
+
+                let tail = new THREE.Mesh(new THREE.BoxGeometry(0.08, 0.08, 0.35), darkMat);
+                tail.position.set(0, 0.5, -0.5);
+                tail.rotation.x = Math.PI / 4;
+                group.add(tail);
+
+            } else if (type === 'Culebra') {
+                // Estructura articulada de serpiente
+                let snakeMat = new THREE.MeshStandardMaterial({ color: 0x15803d, roughness: 0.4, metalness: 0.1 });
+                let bellyMat = new THREE.MeshStandardMaterial({ color: 0x86efac, roughness: 0.5 });
+
+                let head = new THREE.Mesh(new THREE.BoxGeometry(0.42, 0.25, 0.45), snakeMat);
+                head.position.set(0, 0.3, 0.4);
+                group.add(head);
+
+                let eyeMat = new THREE.MeshBasicMaterial({ color: 0xfacc15 });
+                let eyeL = new THREE.Mesh(new THREE.SphereGeometry(0.06), eyeMat);
+                eyeL.position.set(-0.16, 0.35, 0.52);
+                let eyeR = eyeL.clone(); eyeR.position.x = 0.16;
+                group.add(eyeL, eyeR);
+
+                // Eslabones del cuerpo
+                for (let i = 0; i < 4; i++) {
+                    let seg = new THREE.Mesh(new THREE.CylinderGeometry(0.18 - (i*0.03), 0.2 - (i*0.03), 0.3, 8), snakeMat);
+                    seg.rotation.x = Math.PI / 2;
+                    seg.position.set(Math.sin(i) * 0.1, 0.18, 0.1 - (i * 0.25));
+                    group.add(seg);
+                }
+
+            } else if (type === 'Oso') {
+                // Oso salvaje robusto
+                let bearMat = new THREE.MeshStandardMaterial({ color: 0x451a03, roughness: 0.95 });
+                let snoutMat = new THREE.MeshStandardMaterial({ color: 0x78350f, roughness: 0.8 });
+
+                let body = new THREE.Mesh(new THREE.BoxGeometry(0.85, 0.75, 1.1), bearMat);
+                body.position.y = 0.55;
+                group.add(body);
+
+                let head = new THREE.Mesh(new THREE.SphereGeometry(0.38, 10, 10), bearMat);
+                head.position.set(0, 0.85, 0.45);
+                group.add(head);
+
+                let snout = new THREE.Mesh(new THREE.BoxGeometry(0.28, 0.22, 0.25), snoutMat);
+                snout.position.set(0, 0.78, 0.72);
+                group.add(snout);
+
+                let earL = new THREE.Mesh(new THREE.SphereGeometry(0.12, 8, 8), bearMat);
+                earL.position.set(-0.3, 1.15, 0.42);
+                let earR = earL.clone(); earR.position.x = 0.3;
+                group.add(earL, earR);
+            }
+            // --- NUEVOS ENEMIGOS NIVELES 7-11: modelado 3D detallado + arma diferenciada ---
+            else if (type === 'Momia') {
+                // Momia Ancestral egipcia - vendajes ajados, brillo dorado ritual
+                let wrapMat = new THREE.MeshStandardMaterial({ color: 0xe8dcc0, roughness: 0.95 });
+                let darkWrapMat = new THREE.MeshStandardMaterial({ color: 0xb0a482, roughness: 0.9 });
+                let goldMat = new THREE.MeshStandardMaterial({ color: 0xd4af37, metalness: 0.9, roughness: 0.2, emissive: 0xd4af37, emissiveIntensity: 0.3 });
+                let eyeMat = new THREE.MeshBasicMaterial({ color: 0x39ff14 });
+
+                let torso = new THREE.Mesh(new THREE.BoxGeometry(0.55, 0.75, 0.35), wrapMat);
+                torso.position.y = 0.75;
+                group.add(torso);
+                for (let i = 0; i < 5; i++) {
+                    let band = new THREE.Mesh(new THREE.BoxGeometry(0.58, 0.07, 0.38), i % 2 === 0 ? darkWrapMat : wrapMat);
+                    band.rotation.z = 0.15;
+                    band.position.set(0, 0.45 + i * 0.14, 0);
+                    group.add(band);
+                }
+                let head = new THREE.Mesh(new THREE.SphereGeometry(0.3, 10, 10), wrapMat);
+                head.position.set(0, 1.28, 0);
+                group.add(head);
+                let mask = new THREE.Mesh(new THREE.ConeGeometry(0.28, 0.5, 6), goldMat);
+                mask.position.set(0, 1.3, 0.02);
+                mask.rotation.x = Math.PI;
+                group.add(mask);
+                let eyeL = new THREE.Mesh(new THREE.BoxGeometry(0.07, 0.04, 0.03), eyeMat);
+                eyeL.position.set(-0.1, 1.3, 0.27);
+                let eyeR = eyeL.clone(); eyeR.position.x = 0.1;
+                group.add(eyeL, eyeR);
+                // Brazo con lanza ceremonial dorada
+                let arm = new THREE.Mesh(new THREE.CylinderGeometry(0.06, 0.06, 0.5, 8), wrapMat);
+                arm.rotation.z = Math.PI / 2.4;
+                arm.position.set(0.32, 0.85, 0.15);
+                group.add(arm);
+                let weaponGroup = new THREE.Group();
+                let spearShaft = new THREE.Mesh(new THREE.CylinderGeometry(0.025, 0.025, 0.9, 8), darkWrapMat);
+                let spearTip = new THREE.Mesh(new THREE.ConeGeometry(0.08, 0.28, 8), goldMat);
+                spearTip.position.y = 0.59;
+                weaponGroup.add(spearShaft, spearTip);
+                weaponGroup.rotation.x = Math.PI / 2.5;
+                weaponGroup.position.set(0.5, 0.95, 0.35);
+                group.add(weaponGroup);
+                group.userData.weaponMuzzle = new THREE.Vector3(0.5, 0.95, 0.6);
+            }
+            else if (type === 'GuerreroJaguar') {
+                // Guerrero Jaguar maya - pieles moteadas, tocado de plumas jade
+                let skinMat = new THREE.MeshStandardMaterial({ color: 0xd4a24c, roughness: 0.7 });
+                let jaguarMat = new THREE.MeshStandardMaterial({ color: 0xe0a83a, roughness: 0.6 });
+                let jadeMat = new THREE.MeshStandardMaterial({ color: 0x00c896, metalness: 0.4, roughness: 0.3, emissive: 0x00c896, emissiveIntensity: 0.25 });
+                let darkMat = new THREE.MeshStandardMaterial({ color: 0x2a1a10, roughness: 0.8 });
+
+                let torso = new THREE.Mesh(new THREE.BoxGeometry(0.5, 0.65, 0.32), skinMat);
+                torso.position.y = 0.75;
+                group.add(torso);
+                let pelt = new THREE.Mesh(new THREE.BoxGeometry(0.56, 0.4, 0.36), jaguarMat);
+                pelt.position.set(0, 0.95, -0.02);
+                group.add(pelt);
+                for (let i = 0; i < 10; i++) {
+                    let spot = new THREE.Mesh(new THREE.CircleGeometry(0.03, 6), darkMat);
+                    spot.position.set((Math.random()-0.5)*0.45, 0.6 + Math.random()*0.5, 0.17);
+                    group.add(spot);
+                }
+                let head = new THREE.Mesh(new THREE.SphereGeometry(0.26, 10, 10), skinMat);
+                head.position.set(0, 1.28, 0);
+                group.add(head);
+                let headdress = new THREE.Mesh(new THREE.ConeGeometry(0.22, 0.5, 8), jadeMat);
+                headdress.position.set(0, 1.62, -0.05);
+                group.add(headdress);
+                // Cerbatana
+                let weaponGroup = new THREE.Group();
+                let blowgun = new THREE.Mesh(new THREE.CylinderGeometry(0.03, 0.035, 0.7, 8), darkMat);
+                weaponGroup.add(blowgun);
+                weaponGroup.rotation.z = Math.PI / 2.2;
+                weaponGroup.position.set(0.35, 1.15, 0.15);
+                group.add(weaponGroup);
+                group.userData.weaponMuzzle = new THREE.Vector3(0.68, 1.15, 0.15);
+            }
+            else if (type === 'GuerreroAguila') {
+                // Guerrero Águila azteca - plumaje ceremonial, pico dorado
+                let skinMat = new THREE.MeshStandardMaterial({ color: 0xb5652f, roughness: 0.7 });
+                let feathMat = new THREE.MeshStandardMaterial({ color: 0x8b4513, roughness: 0.6 });
+                let beakMat = new THREE.MeshStandardMaterial({ color: 0xffcc33, metalness: 0.6, roughness: 0.3, emissive: 0xff6600, emissiveIntensity: 0.2 });
+                let obsidianMat = new THREE.MeshStandardMaterial({ color: 0x1c1c1c, metalness: 0.8, roughness: 0.15 });
+
+                let torso = new THREE.Mesh(new THREE.BoxGeometry(0.52, 0.68, 0.33), skinMat);
+                torso.position.y = 0.75;
+                group.add(torso);
+                let wingL = new THREE.Mesh(new THREE.ConeGeometry(0.18, 0.6, 6), feathMat);
+                wingL.rotation.z = Math.PI / 2.2;
+                wingL.position.set(-0.4, 0.85, 0);
+                let wingR = wingL.clone(); wingR.rotation.z = -Math.PI / 2.2; wingR.position.x = 0.4;
+                group.add(wingL, wingR);
+                let head = new THREE.Mesh(new THREE.SphereGeometry(0.27, 10, 10), feathMat);
+                head.position.set(0, 1.3, 0);
+                group.add(head);
+                let beak = new THREE.Mesh(new THREE.ConeGeometry(0.09, 0.3, 6), beakMat);
+                beak.rotation.x = Math.PI / 2;
+                beak.position.set(0, 1.26, 0.28);
+                group.add(beak);
+                // Cuchillos de obsidiana en mano
+                let weaponGroup = new THREE.Group();
+                let blade = new THREE.Mesh(new THREE.ConeGeometry(0.06, 0.35, 4), obsidianMat);
+                blade.rotation.x = Math.PI / 2;
+                weaponGroup.add(blade);
+                weaponGroup.position.set(0.4, 0.9, 0.2);
+                group.add(weaponGroup);
+                group.userData.weaponMuzzle = new THREE.Vector3(0.4, 0.9, 0.4);
+            }
+            else if (type === 'NinjaSombra') {
+                // Ninja Sombra chino/feudal - traje oscuro, capucha, shurikens
+                let clothMat = new THREE.MeshStandardMaterial({ color: 0x171422, roughness: 0.55 });
+                let strapMat = new THREE.MeshStandardMaterial({ color: 0x2a0e0e, roughness: 0.6 });
+                let steelMat = new THREE.MeshStandardMaterial({ color: 0xb8bfc7, metalness: 0.9, roughness: 0.15 });
+                let eyeMat = new THREE.MeshBasicMaterial({ color: 0xff2244 });
+
+                let torso = new THREE.Mesh(new THREE.BoxGeometry(0.46, 0.62, 0.3), clothMat);
+                torso.position.y = 0.72;
+                group.add(torso);
+                let strapDiag = new THREE.Mesh(new THREE.BoxGeometry(0.5, 0.09, 0.32), strapMat);
+                strapDiag.rotation.z = Math.PI / 4;
+                strapDiag.position.set(0, 0.85, 0.02);
+                group.add(strapDiag);
+                let head = new THREE.Mesh(new THREE.SphereGeometry(0.24, 10, 10), clothMat);
+                head.position.set(0, 1.2, 0);
+                group.add(head);
+                let eyeL = new THREE.Mesh(new THREE.BoxGeometry(0.07, 0.03, 0.02), eyeMat);
+                eyeL.position.set(-0.08, 1.22, 0.22);
+                let eyeR = eyeL.clone(); eyeR.position.x = 0.08;
+                group.add(eyeL, eyeR);
+                // Shurikens en cinturón
+                let weaponGroup = new THREE.Group();
+                let star = new THREE.Mesh(new THREE.OctahedronGeometry(0.09, 0), steelMat);
+                weaponGroup.add(star);
+                weaponGroup.position.set(0.3, 0.75, 0.18);
+                group.add(weaponGroup);
+                group.userData.weaponMuzzle = new THREE.Vector3(0.3, 0.9, 0.2);
+            }
+            else if (type === 'Minotauro') {
+                // Minotauro Espectral griego - musculatura translúcida, cuernos y jabalina
+                let bodyMat = new THREE.MeshStandardMaterial({ color: 0x5a5450, roughness: 0.7, transparent: true, opacity: 0.9, emissive: 0x2244ff, emissiveIntensity: 0.15 });
+                let hornMat = new THREE.MeshStandardMaterial({ color: 0xf0ead6, roughness: 0.3 });
+                let electricMat = new THREE.MeshBasicMaterial({ color: 0x66ccff });
+
+                let torso = new THREE.Mesh(new THREE.BoxGeometry(0.75, 0.85, 0.45), bodyMat);
+                torso.position.y = 0.85;
+                group.add(torso);
+                let head = new THREE.Mesh(new THREE.BoxGeometry(0.45, 0.4, 0.4), bodyMat);
+                head.position.set(0, 1.5, 0.05);
+                group.add(head);
+                let hornL = new THREE.Mesh(new THREE.ConeGeometry(0.06, 0.35, 8), hornMat);
+                hornL.position.set(-0.18, 1.78, 0);
+                hornL.rotation.z = 0.4;
+                let hornR = hornL.clone(); hornR.position.x = 0.18; hornR.rotation.z = -0.4;
+                group.add(hornL, hornR);
+                let eyeL = new THREE.Mesh(new THREE.SphereGeometry(0.05, 6, 6), electricMat);
+                eyeL.position.set(-0.1, 1.52, 0.24);
+                let eyeR = eyeL.clone(); eyeR.position.x = 0.1;
+                group.add(eyeL, eyeR);
+                // Jabalina pesada
+                let weaponGroup = new THREE.Group();
+                let jShaft = new THREE.Mesh(new THREE.CylinderGeometry(0.035, 0.035, 1.1, 8), hornMat);
+                let jTip = new THREE.Mesh(new THREE.ConeGeometry(0.09, 0.3, 6), electricMat);
+                jTip.position.y = 0.7;
+                weaponGroup.add(jShaft, jTip);
+                weaponGroup.rotation.x = Math.PI / 2.3;
+                weaponGroup.position.set(0.55, 1.1, 0.4);
+                group.add(weaponGroup);
+                group.userData.weaponMuzzle = new THREE.Vector3(0.55, 1.1, 0.75);
+            }
+
+            group.traverse(c => {
+                if(c.isMesh) { c.castShadow = true; c.receiveShadow = true; }
+            });
+
+            return group;
+        }
+
+        function spawnEnemy(x, z) {
+            let currentEnemyType, weaponType = null;
+
+            if (Game.level <= 6) {
+                // Lógica original intacta para niveles 1-6
+                let typeIndex = (Game.level - 1) % 6;
+                let types = ['León', 'Fantasma', 'Robot', 'Perro', 'Culebra', 'Oso'];
+                currentEnemyType = types[typeIndex];
+            } else {
+                // Niveles 7-11: enemigo característico único por nivel, con arma a distancia
+                let cfg = NewLevelConfig[Game.level];
+                currentEnemyType = cfg.enemyType;
+                weaponType = cfg.weapon;
+            }
+
+            let eGroup = createEnemyModel(currentEnemyType);
+            eGroup.position.set(x, 0, z);
+            mazeGroup.add(eGroup);
+
+            let speed = 1.6 + (Game.level * 0.35);
+            let enemyData = {
+                mesh: eGroup,
+                type: currentEnemyType,
+                speed: speed,
+                x: x,
+                z: z
+            };
+
+            if (weaponType) {
+                // Enemigos astutos y poderosos: más veloces, con línea de visión y disparo propio
+                enemyData.speed = speed * 1.15;
+                enemyData.weapon = weaponType;
+                enemyData.sightRange = 16 + Game.level;
+                enemyData.fireCooldown = 1.6 + Math.random() * 0.8;
+                enemyData.fireTimer = enemyData.fireCooldown * Math.random();
+            }
+
+            Game.enemies.push(enemyData);
+        }
+
+        // ==========================================================================
+        // NUEVO: TORRES-PORTAL (HITOS DE INICIO Y META) — NIVELES 1 AL 11
+        // ==========================================================================
+        function createPortalTower(x, z, isStart, level) {
+            let color = ClassicPortalColors[Game.currentBiome] || 0x2ecc71;
+            let materialProps = { metalness: 0.6, roughness: 0.3 };
+
+            if (level >= 7 && NewLevelConfig[level]) {
+                color = NewLevelConfig[level].portalColor;
+                let matType = NewLevelConfig[level].portalMat;
+                if (matType === 'gold') materialProps = { metalness: 0.9, roughness: 0.15 };
+                else if (matType === 'jade') materialProps = { metalness: 0.3, roughness: 0.25 };
+                else if (matType === 'basalto') materialProps = { metalness: 0.2, roughness: 0.75 };
+                else if (matType === 'madera') materialProps = { metalness: 0.05, roughness: 0.6 };
+                else if (matType === 'marmol') materialProps = { metalness: 0.1, roughness: 0.2 };
+            }
+
+            let group = new THREE.Group();
+            let baseMat = new THREE.MeshStandardMaterial({ color: color, ...materialProps });
+            let coreMat = new THREE.MeshStandardMaterial({ color: color, emissive: color, emissiveIntensity: 1.1, metalness: 0.4, roughness: 0.2, transparent: true, opacity: 0.85 });
+
+            let base = new THREE.Mesh(new THREE.CylinderGeometry(0.9, 1.05, 0.4, 16), baseMat);
+            base.position.y = 0.2;
+            base.castShadow = true; base.receiveShadow = true;
+            group.add(base);
+
+            let pillarCount = 4;
+            let pillars = [];
+            for (let i = 0; i < pillarCount; i++) {
+                let angle = (i / pillarCount) * Math.PI * 2;
+                let pillar = new THREE.Mesh(new THREE.CylinderGeometry(0.14, 0.16, 3.4, 8), baseMat);
+                pillar.position.set(Math.cos(angle) * 0.75, 1.9, Math.sin(angle) * 0.75);
+                pillar.castShadow = true;
+                group.add(pillar);
+                pillars.push(pillar);
+            }
+
+            let topRing = new THREE.Mesh(new THREE.TorusGeometry(0.85, 0.09, 8, 20), baseMat);
+            topRing.position.y = 3.55;
+            topRing.rotation.x = Math.PI / 2;
+            group.add(topRing);
+
+            // Núcleo del portal: anillos rotatorios + disco emisivo
+            let portalCore = new THREE.Mesh(new THREE.CylinderGeometry(0.7, 0.7, 0.12, 24), coreMat);
+            portalCore.rotation.x = Math.PI / 2;
+            portalCore.position.y = 1.9;
+            group.add(portalCore);
+
+            let ring1 = new THREE.Mesh(new THREE.TorusGeometry(0.6, 0.04, 8, 24), coreMat);
+            ring1.position.y = 1.9;
+            group.add(ring1);
+            let ring2 = new THREE.Mesh(new THREE.TorusGeometry(0.45, 0.03, 8, 24), coreMat);
+            ring2.position.y = 1.9;
+            ring2.rotation.x = Math.PI / 3;
+            group.add(ring2);
+
+            // Partículas ascendentes
+            let particleGeo = new THREE.SphereGeometry(0.045, 6, 6);
+            let particleMat = new THREE.MeshBasicMaterial({ color: color });
+            let particles = [];
+            for (let i = 0; i < 14; i++) {
+                let p = new THREE.Mesh(particleGeo, particleMat);
+                let a = Math.random() * Math.PI * 2;
+                let r = 0.3 + Math.random() * 0.5;
+                p.position.set(Math.cos(a) * r, Math.random() * 3.4, Math.sin(a) * r);
+                group.add(p);
+                particles.push({ mesh: p, speed: 0.6 + Math.random() * 0.8, radius: r, angle: a });
+            }
+
+            // Fuego en la base para niveles con temática ígnea (Azteca)
+            let fireLight = null;
+            if (level === 9) {
+                fireLight = new THREE.PointLight(0xff5500, 1.2, 8);
+                fireLight.position.y = 0.6;
+                group.add(fireLight);
+            }
+
+            let portalLight = new THREE.PointLight(color, 1.4, 10);
+            portalLight.position.y = 2.2;
+            group.add(portalLight);
+
+            let label = isStart ? 'INICIO' : 'PORTAL';
+            group.position.set(x, 0, z);
+            mazeGroup.add(group);
+
+            Game.portalTowers.push({
+                mesh: group, ring1, ring2, portalCore, particles, pillars, isStart, color
+            });
+
+            return group;
+        }
+
+        // ==========================================================================
+        // NUEVO: TRAMPAS AMBIENTALES INTERACTIVAS — NIVELES 7 AL 11
+        // ==========================================================================
+        function spawnTrap(x, z, level) {
+            let cfg = NewLevelConfig[level];
+            if (!cfg) return;
+            let type = cfg.trapType;
+            let group = new THREE.Group();
+            let trapData = { mesh: group, type, x, z, phase: Math.random() * Math.PI * 2, active: true, cooldown: 0 };
+
+            if (type === 'estaca') {
+                // Estacas egipcias emergentes desde el piso
+                let mat = new THREE.MeshStandardMaterial({ color: 0x8a7a5a, metalness: 0.3, roughness: 0.6 });
+                for (let i = 0; i < 3; i++) {
+                    let spike = new THREE.Mesh(new THREE.ConeGeometry(0.09, 0.65, 6), mat);
+                    spike.position.set((i - 1) * 0.25, -0.3, 0);
+                    group.add(spike);
+                }
+                trapData.spikes = group.children;
+                trapData.radius = 0.9;
+            } else if (type === 'pendulo') {
+                // Péndulo maya oscilante con hoja de obsidiana
+                let pivot = new THREE.Group();
+                pivot.position.y = 3.2;
+                let rope = new THREE.Mesh(new THREE.CylinderGeometry(0.03, 0.03, 2.4, 6), new THREE.MeshStandardMaterial({ color: 0x3a2a1a }));
+                rope.position.y = -1.2;
+                let blade = new THREE.Mesh(new THREE.ConeGeometry(0.35, 0.6, 4), new THREE.MeshStandardMaterial({ color: 0x1c1c1c, metalness: 0.7, roughness: 0.2 }));
+                blade.rotation.x = Math.PI;
+                blade.position.y = -2.5;
+                pivot.add(rope, blade);
+                group.add(pivot);
+                trapData.pivot = pivot;
+                trapData.blade = blade;
+                trapData.radius = 0.7;
+            } else if (type === 'geiser') {
+                // Géiser de fuego azteca intermitente
+                let base = new THREE.Mesh(new THREE.CylinderGeometry(0.4, 0.5, 0.15, 10), new THREE.MeshStandardMaterial({ color: 0x2b2b2e }));
+                group.add(base);
+                let flameMat = new THREE.MeshBasicMaterial({ color: 0xff6600, transparent: true, opacity: 0.85 });
+                let flame = new THREE.Mesh(new THREE.ConeGeometry(0.3, 1.6, 10), flameMat);
+                flame.position.y = 0.8;
+                group.add(flame);
+                let light = new THREE.PointLight(0xff5500, 1.0, 5);
+                light.position.y = 0.5;
+                group.add(light);
+                trapData.flame = flame;
+                trapData.light = light;
+                trapData.radius = 0.75;
+            } else if (type === 'makibishi') {
+                // Abrojos/makibishi chinos esparcidos
+                let mat = new THREE.MeshStandardMaterial({ color: 0x2a2a2a, metalness: 0.6, roughness: 0.4 });
+                for (let i = 0; i < 5; i++) {
+                    let spike = new THREE.Mesh(new THREE.TetrahedronGeometry(0.13, 0), mat);
+                    spike.position.set((Math.random()-0.5)*0.9, 0.06, (Math.random()-0.5)*0.9);
+                    group.add(spike);
+                }
+                trapData.radius = 0.8;
+            } else if (type === 'columna') {
+                // Columna griega colapsable
+                let mat = new THREE.MeshStandardMaterial({ color: 0xe8e6df, roughness: 0.3 });
+                let col = new THREE.Mesh(new THREE.CylinderGeometry(0.28, 0.32, 2.6, 12), mat);
+                col.position.y = 1.3;
+                group.add(col);
+                trapData.column = col;
+                trapData.baseY = 1.3;
+                trapData.radius = 0.85;
+            }
+
+            group.position.set(x, type === 'pendulo' ? 0 : 0, z);
+            group.traverse(c => { if (c.isMesh) { c.castShadow = true; c.receiveShadow = true; } });
+            mazeGroup.add(group);
+            Game.traps.push(trapData);
+        }
+
+        // ==========================================================================
+        // NUEVO: SISTEMA DE PROYECTILES ENEMIGOS — NIVELES 7 AL 11
+        // ==========================================================================
+        const WeaponVisuals = {
+            'lanza':    { color: 0xd4af37, speed: 11, geo: () => { let g = new THREE.Group(); let shaft = new THREE.Mesh(new THREE.CylinderGeometry(0.025,0.025,0.7,6), new THREE.MeshStandardMaterial({color:0x5a4a2a})); let tip = new THREE.Mesh(new THREE.ConeGeometry(0.06,0.22,6), new THREE.MeshStandardMaterial({color:0xd4af37, metalness:0.8, emissive:0xd4af37, emissiveIntensity:0.4})); tip.position.y=0.46; g.add(shaft,tip); g.rotation.x = Math.PI/2; return g; } },
+            'dardo':    { color: 0x00c896, speed: 15, geo: () => { let g = new THREE.Mesh(new THREE.CylinderGeometry(0.015,0.015,0.35,6), new THREE.MeshStandardMaterial({color:0x00c896, emissive:0x00c896, emissiveIntensity:0.5})); g.rotation.x = Math.PI/2; return g; } },
+            'cuchillo': { color: 0x1c1c1c, speed: 13, geo: () => { let g = new THREE.Mesh(new THREE.ConeGeometry(0.06,0.32,4), new THREE.MeshStandardMaterial({color:0x1c1c1c, metalness:0.8, roughness:0.15})); g.rotation.x = Math.PI/2; return g; } },
+            'shuriken': { color: 0xb8bfc7, speed: 14, geo: () => { let g = new THREE.Mesh(new THREE.OctahedronGeometry(0.13,0), new THREE.MeshStandardMaterial({color:0xb8bfc7, metalness:0.9, roughness:0.1})); return g; } },
+            'jabalina': { color: 0x66ccff, speed: 12, geo: () => { let g = new THREE.Group(); let shaft = new THREE.Mesh(new THREE.CylinderGeometry(0.03,0.03,0.85,6), new THREE.MeshStandardMaterial({color:0xf0ead6})); let tip = new THREE.Mesh(new THREE.ConeGeometry(0.07,0.25,6), new THREE.MeshBasicMaterial({color:0x66ccff})); tip.position.y=0.55; g.add(shaft,tip); g.rotation.x = Math.PI/2; return g; } }
+        };
+
+        function fireEnemyProjectile(enemy) {
+            let visual = WeaponVisuals[enemy.weapon];
+            if (!visual) return;
+            let mesh = visual.geo();
+            mesh.position.copy(enemy.mesh.position);
+            mesh.position.y = 0.95;
+
+            let dir = new THREE.Vector3().subVectors(playerMesh.position, enemy.mesh.position);
+            dir.y = 0;
+            dir.normalize();
+
+            let angle = Math.atan2(dir.x, dir.z);
+            mesh.rotation.y = angle;
+
+            scene.add(mesh);
+            AudioEngine.playShoot();
+            Game.enemyProjectiles.push({ mesh, dir, speed: visual.speed, spinning: enemy.weapon === 'shuriken' });
+        }
+
+        // ==========================================================================
+        // NUEVO: TOAST VISUAL DE VIDA EXTRA
+        // ==========================================================================
+        let extraLifeToastTimeout = null;
+        function showExtraLifeToast() {
+            let toast = document.getElementById('extralife-toast');
+            toast.classList.add('show');
+            AudioEngine.playCoin();
+            if (extraLifeToastTimeout) clearTimeout(extraLifeToastTimeout);
+            extraLifeToastTimeout = setTimeout(() => toast.classList.remove('show'), 2200);
+        }
+
+        // ==========================================================================
+        // NUEVO: ANIMACIÓN DE TORRES-PORTAL (anillos rotatorios + partículas ascendentes)
+        // ==========================================================================
+        function updatePortalTowers(delta) {
+            for (let tower of Game.portalTowers) {
+                tower.ring1.rotation.z += delta * 0.9;
+                tower.ring2.rotation.y += delta * 1.3;
+                tower.portalCore.rotation.z += delta * 0.5;
+                for (let p of tower.particles) {
+                    p.mesh.position.y += p.speed * delta;
+                    if (p.mesh.position.y > 3.6) p.mesh.position.y = 0;
+                    p.angle += delta * 0.6;
+                    p.mesh.position.x = Math.cos(p.angle) * p.radius;
+                    p.mesh.position.z = Math.sin(p.angle) * p.radius;
+                }
+            }
+        }
+
+        // ==========================================================================
+        // NUEVO: CINEMÁTICA 3D DE ENTRADA DE NIVEL — ÓRBITA AUTOMÁTICA 360°
+        // ==========================================================================
+        function updateLevelCinematic(delta) {
+            Game.cinematic.elapsed += delta;
+            let t = Math.min(1, Game.cinematic.elapsed / Game.cinematic.duration);
+            let angle = t * Math.PI * 2;
+            let radius = 9;
+            let camX = Game.cinematic.centerX + radius * Math.sin(angle);
+            let camZ = Game.cinematic.centerZ + radius * Math.cos(angle);
+            let camY = 4.2 + Math.sin(t * Math.PI) * 2.2;
+
+            camera.position.set(camX, camY, camZ);
+            camera.lookAt(Game.cinematic.centerX, 2.1, Game.cinematic.centerZ);
+
+            if (Game.cinematic.elapsed >= Game.cinematic.duration) {
+                Game.cinematic.active = false;
+                // Devuelve el control al jugador con la cámara orbital manual habitual
+                Game.cameraOrbit.theta = 0;
+                Game.cameraOrbit.phi = Math.PI / 3;
+                Game.cameraOrbit.radius = 16;
+            }
+        }
+
+        // --- CONSTRUCTORES DEL PERSONAJE PRINCIPAL Y SU ARMA ---
+        function createPlayer() {
+            playerMesh = new THREE.Group();
+
+            const skinMat = new THREE.MeshStandardMaterial({ color: 0xe0a98c, roughness: 0.55, metalness: 0.1 });
+            const jacketMat = new THREE.MeshStandardMaterial({ color: 0x2e5a36, roughness: 0.65, metalness: 0.05 });
+            const pantsMat = new THREE.MeshStandardMaterial({ color: 0x6d4c41, roughness: 0.8 });
+            const leatherMat = new THREE.MeshStandardMaterial({ color: 0x3e2723, roughness: 0.4, metalness: 0.1 });
+            const metalMat = new THREE.MeshStandardMaterial({ color: 0xb0bec5, roughness: 0.2, metalness: 0.95 });
+            const woodMat = new THREE.MeshStandardMaterial({ color: 0x4e2710, roughness: 0.7 });
+            const whiteMat = new THREE.MeshBasicMaterial({ color: 0xffffff });
+            const irisMat = new THREE.MeshBasicMaterial({ color: 0x3e2723 });
+
+            // Cabeza
+            playerHead = new THREE.Group();
+            playerHead.position.y = 1.35;
+
+            const headBase = new THREE.Mesh(new THREE.BoxGeometry(0.38, 0.4, 0.38), skinMat);
+            playerHead.add(headBase);
+
+            const jaw = new THREE.Mesh(new THREE.BoxGeometry(0.34, 0.14, 0.32), skinMat);
+            jaw.position.set(0, -0.15, 0.03);
+            playerHead.add(jaw);
+
+            const nose = new THREE.Mesh(new THREE.BoxGeometry(0.06, 0.1, 0.08), skinMat);
+            nose.position.set(0, -0.02, 0.2);
+            playerHead.add(nose);
+
+            // Ojos
+            const eyeGeo = new THREE.BoxGeometry(0.08, 0.05, 0.02);
+            const pupilGeo = new THREE.BoxGeometry(0.04, 0.04, 0.01);
+            
+            const eyeL = new THREE.Mesh(eyeGeo, whiteMat); eyeL.position.set(-0.1, 0.04, 0.185);
+            const pupilL = new THREE.Mesh(pupilGeo, irisMat); pupilL.position.set(0, 0, 0.01);
+            eyeL.add(pupilL); playerHead.add(eyeL);
+
+            const eyeR = new THREE.Mesh(eyeGeo, whiteMat); eyeR.position.set(0.1, 0.04, 0.185);
+            const pupilR = new THREE.Mesh(pupilGeo, irisMat); pupilR.position.set(0, 0, 0.01);
+            eyeR.add(pupilR); playerHead.add(eyeR);
+
+            // Sombrero de Explorador
+            playerHat = new THREE.Group();
+            playerHat.position.set(0, 0.22, 0);
+            
+            const hatDome = new THREE.Mesh(new THREE.CylinderGeometry(0.24, 0.26, 0.18, 14), leatherMat);
+            hatDome.position.y = 0.09;
+            playerHat.add(hatDome);
+
+            const hatBrim = new THREE.Mesh(new THREE.CylinderGeometry(0.48, 0.48, 0.02, 16), leatherMat);
+            playerHat.add(hatBrim);
+
+            const hatRibbon = new THREE.Mesh(new THREE.CylinderGeometry(0.265, 0.265, 0.035, 14), metalMat);
+            hatRibbon.position.y = 0.02;
+            playerHat.add(hatRibbon);
+
+            playerHead.add(playerHat);
+            playerMesh.add(playerHead);
+
+            // Torso
+            const torsoGroup = new THREE.Group();
+            torsoGroup.position.y = 0.95;
+
+            const coat = new THREE.Mesh(new THREE.BoxGeometry(0.44, 0.52, 0.28), jacketMat);
+            torsoGroup.add(coat);
+
+            const belt = new THREE.Mesh(new THREE.BoxGeometry(0.46, 0.08, 0.3), leatherMat);
+            belt.position.y = -0.21;
+            torsoGroup.add(belt);
+
+            const buckle = new THREE.Mesh(new THREE.BoxGeometry(0.08, 0.1, 0.32), metalMat);
+            buckle.position.set(0, -0.21, 0.01);
+            torsoGroup.add(buckle);
+
+            playerMesh.add(torsoGroup);
+
+            // Extremidades
+            const shoulderOffset = 0.26;
+            const armY = 1.1;
+
+            // Brazo Izquierdo
+            playerArmL = new THREE.Group();
+            playerArmL.position.set(-shoulderOffset, armY, 0);
+            const sleeveL = new THREE.Mesh(new THREE.BoxGeometry(0.1, 0.34, 0.12), jacketMat);
+            sleeveL.position.y = -0.17;
+            const handL = new THREE.Mesh(new THREE.BoxGeometry(0.08, 0.12, 0.1), skinMat);
+            handL.position.y = -0.4;
+            playerArmL.add(sleeveL, handL);
+            playerMesh.add(playerArmL);
+
+            // Brazo Derecho (Sostiene el Arma)
+            playerArmR = new THREE.Group();
+            playerArmR.position.set(shoulderOffset, armY, 0);
+            const sleeveR = new THREE.Mesh(new THREE.BoxGeometry(0.1, 0.34, 0.12), jacketMat);
+            sleeveR.position.y = -0.17;
+            const handR = new THREE.Mesh(new THREE.BoxGeometry(0.08, 0.12, 0.1), skinMat);
+            handR.position.y = -0.4;
+            playerArmR.add(sleeveR, handR);
+
+            // RIFLE DE EXPEDICIÓN
+            rifleMesh = new THREE.Group();
+            
+            const stock = new THREE.Mesh(new THREE.BoxGeometry(0.06, 0.1, 0.35), woodMat);
+            stock.position.set(0, -0.02, -0.12);
+            rifleMesh.add(stock);
+
+            const receiver = new THREE.Mesh(new THREE.BoxGeometry(0.07, 0.09, 0.25), metalMat);
+            receiver.position.set(0, 0.02, 0.1);
+            rifleMesh.add(receiver);
+
+            const barrel = new THREE.Mesh(new THREE.CylinderGeometry(0.02, 0.02, 0.55, 10), metalMat);
+            barrel.rotation.x = Math.PI / 2;
+            barrel.position.set(0, 0.03, 0.45);
+            rifleMesh.add(barrel);
+
+            const scope = new THREE.Mesh(new THREE.CylinderGeometry(0.022, 0.022, 0.2, 10), metalMat);
+            scope.rotation.x = Math.PI / 2;
+            scope.position.set(0, 0.08, 0.12);
+            rifleMesh.add(scope);
+
+            rifleMesh.position.set(0, -0.38, 0.15);
+            playerArmR.add(rifleMesh);
+
+            playerMesh.add(playerArmR);
+
+            // Piernas
+            const hipOffset = 0.14;
+            const legY = 0.7;
+
+            playerLegL = new THREE.Group();
+            playerLegL.position.set(-hipOffset, legY, 0);
+            const pantL = new THREE.Mesh(new THREE.BoxGeometry(0.13, 0.42, 0.14), pantsMat);
+            pantL.position.y = -0.21;
+            const bootL = new THREE.Mesh(new THREE.BoxGeometry(0.14, 0.18, 0.22), leatherMat);
+            bootL.position.set(0, -0.45, 0.03);
+            playerLegL.add(pantL, bootL);
+            playerMesh.add(playerLegL);
+
+            playerLegR = new THREE.Group();
+            playerLegR.position.set(hipOffset, legY, 0);
+            const pantR = new THREE.Mesh(new THREE.BoxGeometry(0.13, 0.42, 0.14), pantsMat);
+            pantR.position.y = -0.21;
+            const bootR = new THREE.Mesh(new THREE.BoxGeometry(0.14, 0.18, 0.22), leatherMat);
+            bootR.position.set(0, -0.45, 0.03);
+            playerLegR.add(pantR, bootR);
+            playerMesh.add(playerLegR);
+
+            playerMesh.traverse((child) => {
+                if (child.isMesh) {
+                    child.castShadow = true;
+                    child.receiveShadow = true;
+                }
+            });
+
+            playerMesh.position.set(Game.cellSize, 0, Game.cellSize); 
+            scene.add(playerMesh);
+        }
+
+        function fireArrow(shooter = playerMesh) {
+            AudioEngine.playShoot();
+            let bulletGroup = new THREE.Group();
+
+            let coreGeo = new THREE.CylinderGeometry(0.03, 0.03, 0.4, 8);
+            let coreMat = new THREE.MeshStandardMaterial({ color: 0xffea00, emissive: 0xffa500, emissiveIntensity: 0.8, metalness: 0.9, roughness: 0.1 });
+            let core = new THREE.Mesh(coreGeo, coreMat);
+            core.rotation.x = Math.PI / 2;
+            bulletGroup.add(core);
+
+            bulletGroup.position.set(shooter.position.x, 1.05, shooter.position.z);
+            bulletGroup.rotation.y = shooter.rotation.y;
+
+            let dir = new THREE.Vector3(0, 0, 1).applyAxisAngle(new THREE.Vector3(0, 1, 0), shooter.rotation.y).normalize();
+
+            scene.add(bulletGroup);
+            Game.arrows.push({ mesh: bulletGroup, dir, speed: 28, origin: shooter.position.clone() });
+        }
+
+        function startNewLevel() {
+            // Victoria: el explorador completó los 11 niveles
+            if (Game.level > 11) {
+                triggerVictory();
+                return;
+            }
+
+            Game.maze = Net.role === 'guest' && Net.state ? Net.state.maze : generateMaze(Game.gridSize);
+            Game.currentBiome = getBiomeForLevel(Game.level);
+
+            buildVisualMaze();
+
+            if(playerMesh) {
+                playerMesh.position.set(Game.cellSize, 0, Game.cellSize);
+                playerMesh.rotation.set(0,0,0);
+            }
+
+            document.getElementById('hud-level').innerText = Game.level;
+            document.getElementById('hud-biome').innerText = Game.currentBiome;
+
+            if(AudioEngine.ctx) {
+                AudioEngine.playAmbient(Game.currentBiome);
+            }
+
+            // --- NUEVO: Cinemática 3D de entrada (órbita 360° automática) en niveles 7-11 ---
+            if (Game.level >= 7) {
+                let label = NewLevelConfig[Game.level] ? NewLevelConfig[Game.level].label : Game.currentBiome;
+                playLevelCinematic(Game.cellSize, Game.cellSize, `Nivel ${Game.level}`, label);
+            } else {
+                Game.cinematic.active = false;
+            }
+        }
+
+        function playLevelCinematic(centerX, centerZ, titleText, subtitleText) {
+            Game.cinematic.active = true;
+            Game.cinematic.elapsed = 0;
+            Game.cinematic.centerX = centerX;
+            Game.cinematic.centerZ = centerZ;
+
+            let banner = document.getElementById('level-cinematic-banner');
+            document.getElementById('level-cinematic-title').innerText = titleText;
+            document.getElementById('level-cinematic-subtitle').innerText = subtitleText;
+            banner.classList.add('show');
+
+            setTimeout(() => {
+                banner.classList.remove('show');
+            }, Game.cinematic.duration * 1000 - 500);
+        }
+
+        function triggerVictory() {
+            Game.gameOver = true;
+            Game.isReady = false;
+            AudioEngine.stopAmbient();
+            document.getElementById('victory-time').innerText = formatTime(Game.time);
+            document.getElementById('victory-score').innerText = Game.score;
+            document.getElementById('victory-screen').style.display = 'flex';
+            if (Net.role === 'host') { Net.frame = 1; Net.sendState(0); }
+        }
+
+        function handlePlayerDeath() {
+            AudioEngine.playHit();
+            Game.lives--;
+            const damagedTarget = Net.hitTarget || playerMesh;
+            if (damagedTarget !== playerMesh) damagedTarget.position.set(Game.cellSize, 0, Game.cellSize);
+            Net.hitTarget = null;
+            Game.score = Math.max(0, Game.score - 5000); 
+            Game.survivalTimer = 0; 
+
+            updateHUD();
+
+            if (Game.lives <= 0) {
+                endGame();
+            } else {
+                if (damagedTarget === playerMesh) playerMesh.position.set(Game.cellSize, 0, Game.cellSize);
+            }
+        }
+
+        // ============================================================
+        // NUEVO: CONTROL DE VIGENCIA DE TESTING POR FECHA
+        // No altera ninguna otra funcionalidad del juego. Se invoca
+        // desde addScore(), que es donde ocurre el incremento de
+        // vidas del Explorador (Game.lives++).
+        // ============================================================
+        const FECHA_LIMITE_TESTING = null; // Edición cooperativa sin límite de fecha
+
+        function validarVigenciaTesting() {
+            const fechaActual = new Date();
+            const hoy = new Date(fechaActual.getFullYear(), fechaActual.getMonth(), fechaActual.getDate());
+
+            if (FECHA_LIMITE_TESTING && hoy > FECHA_LIMITE_TESTING) {
+                mostrarTestingFinalizado();
+                return false;
+            }
+            return true;
+        }
+
+        function mostrarTestingFinalizado() {
+            if (Game.gameOver) return; // Evita disparos múltiples
+
+            Game.gameOver = true;
+            Game.isReady = false;
+            AudioEngine.stopAmbient();
+
+            const overlay = document.getElementById('testing-finalizado-overlay');
+            overlay.style.display = 'flex';
+
+            setTimeout(() => {
+                overlay.style.display = 'none';
+                endGame();
+            }, 2500);
+        }
+
+        function addScore(amount) {
+            if (!validarVigenciaTesting()) return;
+
+            Game.score += amount;
+            Game.scoreAccumulatorForExtraLife += amount;
+
+            let gainedExtraLife = false;
+            while(Game.scoreAccumulatorForExtraLife >= Game.extraLifeThreshold) {
+                Game.lives++;
+                Game.scoreAccumulatorForExtraLife -= Game.extraLifeThreshold;
+                gainedExtraLife = true;
+            }
+            if (gainedExtraLife) showExtraLifeToast();
+
+            updateHUD();
+        }
+
+        function updateHUD() {
+            document.getElementById('hud-lives').innerText = Game.lives;
+            document.getElementById('hud-score').innerText = Game.score;
+            let remaining = Game.extraLifeThreshold - Game.scoreAccumulatorForExtraLife;
+            document.getElementById('hud-extralife-remaining').innerText = remaining;
+            let pct = (Game.scoreAccumulatorForExtraLife / Game.extraLifeThreshold) * 100;
+            document.getElementById('hud-extralife-bar').style.width = Math.min(100, pct) + '%';
+        }
+
+        function formatTime(sec) {
+            let m = Math.floor(sec / 60).toString().padStart(2, '0');
+            let s = (sec % 60).toString().padStart(2, '0');
+            return `${m}:${s}`;
+        }
+
+        function endGame() {
+            Game.gameOver = true;
+            Game.isReady = false;
+            AudioEngine.stopAmbient();
+            document.getElementById('final-time').innerText = formatTime(Game.time);
+            document.getElementById('final-score').innerText = Game.score;
+            document.getElementById('game-over-screen').style.display = 'flex';
+            if (Net.role === 'host') { Net.frame = 1; Net.sendState(0); }
+        }
+
+        setInterval(() => {
+            if (!Game.isReady || Game.gameOver) return;
+
+            Game.time++;
+            Game.survivalTimer++;
+
+            document.getElementById('hud-time').innerText = formatTime(Game.time);
+            document.getElementById('hud-survival-bonus').innerText = `${Game.survivalTimer}/300s`;
+
+            if (Game.survivalTimer >= 300) {
+                addScore(5000);
+                Game.survivalTimer = 0;
+            }
+        }, 1000);
+
+        window.addEventListener('keydown', (e) => {
+            if(!Game.isReady) return;
+            if(e.key === 'ArrowUp') Game.keys.ArrowUp = true;
+            if(e.key === 'ArrowDown') Game.keys.ArrowDown = true;
+            if(e.key === 'ArrowLeft') Game.keys.ArrowLeft = true;
+            if(e.key === 'ArrowRight') Game.keys.ArrowRight = true;
+            
+            if(e.key === ' ' || e.code === 'Space') {
+                if (Net.role === 'guest') Net.send({ type: 'shoot' });
+                else fireArrow();
+            }
+        });
+
+        window.addEventListener('keyup', (e) => {
+            if(e.key === 'ArrowUp') Game.keys.ArrowUp = false;
+            if(e.key === 'ArrowDown') Game.keys.ArrowDown = false;
+            if(e.key === 'ArrowLeft') Game.keys.ArrowLeft = false;
+            if(e.key === 'ArrowRight') Game.keys.ArrowRight = false;
+        });
+
+        // --- SISTEMA DE COLISIONES SENIOR CON MUROS DE GROSOR 0.5X ---
+        function checkMazeCollision(posX, posZ) {
+            let r = Game.playerRadius;
+            let halfW = Game.wallWidth / 2;
+
+            for (let x = 0; x < Game.gridSize; x++) {
+                for (let z = 0; z < Game.gridSize; z++) {
+                    if (Game.maze[x][z] === 1) {
+                        let wallX = x * Game.cellSize;
+                        let wallZ = z * Game.cellSize;
+
+                        // Verificación AABB (Axis-Aligned Bounding Box) exacta del muro reducido
+                        if (posX + r > wallX - halfW &&
+                            posX - r < wallX + halfW &&
+                            posZ + r > wallZ - halfW &&
+                            posZ - r < wallZ + halfW) {
+                            return true;
+                        }
+                    }
+                }
+            }
+
+            // Límites del mapa externo
+            let boundMin = -Game.cellSize / 2;
+            let boundMax = (Game.gridSize - 0.5) * Game.cellSize;
+            if (posX - r < boundMin || posX + r > boundMax || posZ - r < boundMin || posZ + r > boundMax) {
+                return true;
+            }
+
+            return false;
+        }
+
+        // --- BUCLE PRINCIPAL DE RENDERIZADO Y FÍSICAS ---
+        function animate() {
+            requestAnimationFrame(animate);
+            if (!Game.isReady || Game.gameOver) return;
+
+            let delta = Game.clock.getDelta();
+            Game.animTimer += delta;
+
+            // --- NUEVO: mientras la cinemática de entrada de nivel esté activa, la cámara
+            // ejecuta la órbita automática de 360° y se omite el control manual del jugador ---
+            if (Game.cinematic.active) {
+                updateLevelCinematic(delta);
+                updatePortalTowers(delta);
+                renderer.render(scene, camera);
+                return;
+            }
+
+            if (Net.role === 'guest' && Net.state?.gameOver) { renderer.render(scene, camera); return; }
+            let moveSpeed = 7.0 * delta;
+            let moving = false;
+
+            // Vectores de dirección de la cámara
+            let forward = new THREE.Vector3();
+            camera.getWorldDirection(forward);
+            forward.y = 0; forward.normalize(); 
+
+            let right = new THREE.Vector3();
+            right.crossVectors(forward, camera.up);
+            right.y = 0; right.normalize(); 
+
+            let moveVector = new THREE.Vector3(0, 0, 0);
+
+            if (Game.keys.ArrowUp) { moveVector.add(forward); moving = true; }
+            if (Game.keys.ArrowDown) { moveVector.add(forward.clone().negate()); moving = true; }
+            if (Game.keys.ArrowLeft) { moveVector.add(right.clone().negate()); moving = true; }
+            if (Game.keys.ArrowRight) { moveVector.add(right); moving = true; }
+
+            if (moving) {
+                moveVector.normalize(); 
+                let nextX = playerMesh.position.x + moveVector.x * moveSpeed;
+                let nextZ = playerMesh.position.z + moveVector.z * moveSpeed;
+
+                // Intento de movimiento con deslizamiento suave (Sliding Physics)
+                if (!checkMazeCollision(nextX, nextZ)) {
+                    playerMesh.position.x = nextX;
+                    playerMesh.position.z = nextZ;
+                } else {
+                    if (!checkMazeCollision(nextX, playerMesh.position.z)) {
+                        playerMesh.position.x = nextX;
+                    } else if (!checkMazeCollision(playerMesh.position.x, nextZ)) {
+                        playerMesh.position.z = nextZ;
+                    }
+                }
+
+                let targetAngle = Math.atan2(moveVector.x, moveVector.z);
+                playerMesh.rotation.y = targetAngle;
+
+                // Animación cinemática de caminata
+                const swingAngle = Math.sin(Game.animTimer * 14) * 0.5;
+                playerLegL.rotation.x = swingAngle;
+                playerLegR.rotation.x = -swingAngle;
+
+                playerArmL.rotation.x = -swingAngle * 0.8;
+                playerArmR.rotation.x = (swingAngle * 0.5) - 0.2; 
+
+                playerHat.rotation.x = Math.sin(Game.animTimer * 14) * 0.04;
+                playerHead.rotation.z = Math.cos(Game.animTimer * 7) * 0.03;
+                playerMesh.position.y = Math.abs(Math.sin(Game.animTimer * 14)) * 0.08;
+            } else {
+                // Estado Reposo (Idle)
+                playerLegL.rotation.x = 0; playerLegR.rotation.x = 0;
+                playerArmL.rotation.x = 0; 
+                playerArmR.rotation.x = -0.2; 
+                playerHat.rotation.x = 0; playerHead.rotation.z = 0;
+                playerMesh.position.y = 0;
+                playerHead.position.y = 1.35 + Math.sin(Game.animTimer * 2.5) * 0.015;
+            }
+
+            // Posicionamiento de la cámara orbital suavizada a 30 grados
+            let orbit = Game.cameraOrbit;
+            let targetCamX = playerMesh.position.x + orbit.radius * Math.sin(orbit.phi) * Math.sin(orbit.theta);
+            let targetCamY = playerMesh.position.y + orbit.radius * Math.cos(orbit.phi);
+            let targetCamZ = playerMesh.position.z + orbit.radius * Math.sin(orbit.phi) * Math.cos(orbit.theta);
+
+            camera.position.x += (targetCamX - camera.position.x) * 0.1;
+            camera.position.y += (targetCamY - camera.position.y) * 0.1;
+            camera.position.z += (targetCamZ - camera.position.z) * 0.1;
+            camera.lookAt(playerMesh.position.x, playerMesh.position.y + 0.6, playerMesh.position.z);
+
+            if (Net.role === 'guest') {
+                Net.sendPose(delta);
+                renderer.render(scene, camera);
+                return;
+            }
+
+            // Proyectiles / Balas del rifle
+            for(let i = Game.arrows.length - 1; i >= 0; i--) {
+                let arrow = Game.arrows[i];
+                arrow.mesh.position.addScaledVector(arrow.dir, arrow.speed * delta);
+
+                let aGridX = Math.round(arrow.mesh.position.x / Game.cellSize);
+                let aGridZ = Math.round(arrow.mesh.position.z / Game.cellSize);
+                
+                let hitWall = false;
+                if(aGridX >= 0 && aGridX < Game.gridSize && aGridZ >= 0 && aGridZ < Game.gridSize) {
+                    if(Game.maze[aGridX][aGridZ] === 1) {
+                        let halfW = Game.wallWidth / 2;
+                        if (Math.abs(arrow.mesh.position.x - aGridX * Game.cellSize) < halfW &&
+                            Math.abs(arrow.mesh.position.z - aGridZ * Game.cellSize) < halfW) {
+                            hitWall = true;
+                        }
+                    }
+                }
+
+                let hitEnemy = false;
+                for(let j = Game.enemies.length - 1; j >= 0; j--) {
+                    let enemy = Game.enemies[j];
+                    let dist = arrow.mesh.position.distanceTo(enemy.mesh.position);
+                    if(dist < 1.2) {
+                        scene.remove(enemy.mesh);
+                        mazeGroup.remove(enemy.mesh);
+                        Game.enemies.splice(j, 1);
+                        hitEnemy = true;
+                        AudioEngine.playHit();
+                        
+                        // CÁLCULO DE PUNTAJE SOLICITADO: 250 PTS BASE + 50 PTS ADICIONALES POR NIVEL ALCANZADO
+                        let enemyKilledPoints = 250 + ((Game.level - 1) * 50);
+                        addScore(enemyKilledPoints);
+                        break;
+                    }
+                }
+
+                if(hitWall || hitEnemy || arrow.mesh.position.distanceTo(arrow.origin) > 60) {
+                    scene.remove(arrow.mesh);
+                    Game.arrows.splice(i, 1);
+                }
+            }
+
+            // Movimiento e I.A. de Enemigos
+            for(let enemy of Game.enemies) {
+                let target = Net.role === 'host' && Net.remote &&
+                    enemy.mesh.position.distanceTo(Net.remote.position) < enemy.mesh.position.distanceTo(playerMesh.position)
+                    ? Net.remote : playerMesh;
+                let dirVec = new THREE.Vector3().subVectors(target.position, enemy.mesh.position);
+                dirVec.y = 0; 
+                let distanceToPlayer = dirVec.length();
+                dirVec.normalize();
+
+                enemy.mesh.position.addScaledVector(dirVec, enemy.speed * delta);
+                enemy.mesh.lookAt(target.position.x, target.position.y, target.position.z);
+
+                if(distanceToPlayer < 1.05) {
+                    Net.hitTarget = target;
+                    handlePlayerDeath();
+                    break;
+                }
+
+                // --- NUEVO: enemigos de niveles 7-11 persiguen con línea de visión y disparan a distancia ---
+                if (enemy.weapon) {
+                    enemy.fireTimer -= delta;
+                    if (distanceToPlayer <= enemy.sightRange && enemy.fireTimer <= 0) {
+                        fireEnemyProjectile(enemy);
+                        enemy.fireTimer = enemy.fireCooldown;
+                    }
+                }
+            }
+
+            // --- NUEVO: Movimiento y colisión de proyectiles enemigos (lanzas, dardos, cuchillos, shurikens, jabalinas) ---
+            for (let i = Game.enemyProjectiles.length - 1; i >= 0; i--) {
+                let proj = Game.enemyProjectiles[i];
+                proj.mesh.position.addScaledVector(proj.dir, proj.speed * delta);
+                if (proj.spinning) proj.mesh.rotation.z += delta * 18;
+
+                let pjGridX = Math.round(proj.mesh.position.x / Game.cellSize);
+                let pjGridZ = Math.round(proj.mesh.position.z / Game.cellSize);
+                let hitWall = false;
+                if (pjGridX >= 0 && pjGridX < Game.gridSize && pjGridZ >= 0 && pjGridZ < Game.gridSize) {
+                    if (Game.maze[pjGridX][pjGridZ] === 1) {
+                        let halfW = Game.wallWidth / 2;
+                        if (Math.abs(proj.mesh.position.x - pjGridX * Game.cellSize) < halfW &&
+                            Math.abs(proj.mesh.position.z - pjGridZ * Game.cellSize) < halfW) {
+                            hitWall = true;
+                        }
+                    }
+                }
+
+                let distToPlayer = proj.mesh.position.distanceTo(playerMesh.position);
+                let distToGuest = Net.remote ? proj.mesh.position.distanceTo(Net.remote.position) : Infinity;
+                let hitPlayer = Math.min(distToPlayer, distToGuest) < 0.9;
+
+                if (hitPlayer && !Game.gameOver) {
+                    scene.remove(proj.mesh);
+                    Game.enemyProjectiles.splice(i, 1);
+                    Net.hitTarget = distToGuest < distToPlayer ? Net.remote : playerMesh;
+                    handlePlayerDeath(); // misma función de daño existente, no afecta rifle ni balas del jugador
+                    if (Game.gameOver) break;
+                    continue;
+                }
+
+                if (hitWall || proj.mesh.position.distanceTo(playerMesh.position) > 60) {
+                    scene.remove(proj.mesh);
+                    Game.enemyProjectiles.splice(i, 1);
+                }
+            }
+
+            // --- NUEVO: Trampas ambientales de niveles 7-11 (animación + daño al contacto) ---
+            for (let trap of Game.traps) {
+                if (Game.gameOver) break;
+                trap.phase += delta;
+                if (trap.cooldown > 0) trap.cooldown -= delta;
+                let localTrapDist = Math.hypot(playerMesh.position.x - trap.x, playerMesh.position.z - trap.z);
+                let guestTrapDist = Net.remote ? Math.hypot(Net.remote.position.x - trap.x, Net.remote.position.z - trap.z) : Infinity;
+                let distToPlayer = Math.min(localTrapDist, guestTrapDist);
+                Net.hitTarget = guestTrapDist < localTrapDist ? Net.remote : playerMesh;
+
+                if (trap.type === 'estaca') {
+                    let cycle = Math.sin(trap.phase * 1.4);
+                    let raised = cycle > 0.3;
+                    trap.mesh.position.y = raised ? 0.32 : -0.35;
+                    if (raised && distToPlayer < trap.radius && trap.cooldown <= 0) {
+                        handlePlayerDeath(); trap.cooldown = 1.2;
+                    }
+                } else if (trap.type === 'pendulo') {
+                    trap.pivot.rotation.z = Math.sin(trap.phase * 1.1) * 1.1;
+                    let bladeWorldPos = new THREE.Vector3();
+                    trap.blade.getWorldPosition(bladeWorldPos);
+                    let bladeDist = Math.min(
+                    Math.hypot(playerMesh.position.x - bladeWorldPos.x, playerMesh.position.z - bladeWorldPos.z),
+                    Net.remote ? Math.hypot(Net.remote.position.x - bladeWorldPos.x, Net.remote.position.z - bladeWorldPos.z) : Infinity
+                );
+                    if (bladeDist < 0.8 && trap.cooldown <= 0) { handlePlayerDeath(); trap.cooldown = 1.2; }
+                } else if (trap.type === 'geiser') {
+                    let active = Math.sin(trap.phase * 1.6) > 0.2;
+                    trap.flame.visible = active;
+                    trap.light.intensity = active ? 1.0 : 0;
+                    if (active && distToPlayer < trap.radius && trap.cooldown <= 0) { handlePlayerDeath(); trap.cooldown = 1.2; }
+                } else if (trap.type === 'makibishi') {
+                    if (distToPlayer < trap.radius && trap.cooldown <= 0) { handlePlayerDeath(); trap.cooldown = 1.2; }
+                } else if (trap.type === 'columna') {
+                    let falling = (Math.sin(trap.phase * 0.5) > 0.6);
+                    if (falling) {
+                        trap.column.rotation.z = Math.min(Math.PI / 2.1, (trap.column.rotation.z || 0) + delta * 2.2);
+                    } else {
+                        trap.column.rotation.z = 0;
+                    }
+                    if (falling && trap.column.rotation.z > 0.9 && distToPlayer < trap.radius + 0.5 && trap.cooldown <= 0) {
+                        handlePlayerDeath(); trap.cooldown = 1.5;
+                    }
+                }
+            }
+
+            // --- NUEVO: Animación de Torres-Portal (anillos rotatorios y partículas ascendentes) ---
+            updatePortalTowers(delta);
+
+            // Recolección de Premios
+            for(let i = Game.prizes.length - 1; i >= 0; i--) {
+                let prize = Game.prizes[i];
+                prize.mesh.rotation.y += 2 * delta;
+                prize.mesh.position.y = 0.8 + Math.sin(Game.animTimer * 3 + i) * 0.15;
+
+                let dist = Math.min(playerMesh.position.distanceTo(prize.mesh.position), Net.remote ? Net.remote.position.distanceTo(prize.mesh.position) : Infinity);
+                if(dist < 1.1) {
+                    AudioEngine.playCoin();
+                    addScore(prize.points);
+                    mazeGroup.remove(prize.mesh);
+                    Game.prizes.splice(i, 1);
+                }
+            }
+
+            // Verificación de Transición de Nivel (Llegada a la meta)
+            let pGridX = Math.floor((playerMesh.position.x + Game.cellSize/2) / Game.cellSize);
+            let pGridZ = Math.floor((playerMesh.position.z + Game.cellSize/2) / Game.cellSize);
+
+            let remoteAtGoal = !Net.remote || (Math.floor((Net.remote.position.x + Game.cellSize/2) / Game.cellSize) === Game.gridSize - 2 && Math.floor((Net.remote.position.z + Game.cellSize/2) / Game.cellSize) === Game.gridSize - 2);
+            let localAtGoal = pGridX === Game.gridSize - 2 && pGridZ === Game.gridSize - 2;
+            if ((localAtGoal || (Net.remote && remoteAtGoal)) && (!Net.remote || (localAtGoal && remoteAtGoal))) {
+                Game.level++;
+                startNewLevel();
+            }
+
+            if (Net.role === 'host') Net.sendState(delta);
+            renderer.render(scene, camera);
+        }
+
+        // --- INICIALIZACIÓN Y EVENTOS DE UI ---
+        document.getElementById('btn-start').addEventListener('click', () => {
+            if (Net.starting || Game.isReady) return;
+            if (Net.role === 'guest' && !Net.state) return;
+            Net.starting = true;
+            if (Net.role === 'host') Net.send({ type: 'start' });
+            AudioEngine.init();
+            document.getElementById('menu-screen').style.opacity = 0;
+            setTimeout(() => {
+                document.getElementById('menu-screen').style.display = 'none';
+                initGameSession();
+                Net.starting = false;
+            }, 500);
+        });
+
+        document.getElementById('btn-restart').addEventListener('click', () => {
+            if (Net.role === 'guest') return;
+            document.getElementById('game-over-screen').style.display = 'none';
+            resetGameGlobal();
+        });
+
+        document.getElementById('btn-victory-restart').addEventListener('click', () => {
+            if (Net.role === 'guest') return;
+            document.getElementById('victory-screen').style.display = 'none';
+            resetGameGlobal();
+        });
+
+        let animationStarted = false;
+
+        function initGameSession() {
+            init3D();
+            createPlayer();
+            startNewLevel();
+            Game.isReady = true;
+            Game.clock.start();
+            if (Net.role === 'host') Net.makeRemote();
+            if (Net.role === 'guest') Net.readyLevel = Game.level;
+            
+            if (!animationStarted) {
+                animate();
+                animationStarted = true;
+            }
+        }
+
+        function resetGameGlobal() {
+            Game.score = 0;
+            Game.lives = 3;
+            Game.level = 1;
+            Game.time = 0;
+            Game.survivalTimer = 0;
+            Game.scoreAccumulatorForExtraLife = 0;
+            Game.gameOver = false;
+            Game.traps = [];
+            Game.enemyProjectiles = [];
+            Game.portalTowers = [];
+            Game.cinematic.active = false;
+            document.getElementById('level-cinematic-banner').classList.remove('show');
+
+            Game.cameraOrbit.theta = 0;
+            Game.cameraOrbit.phi = Math.PI / 3;
+            Game.cameraOrbit.radius = 16; 
+            
+            updateHUD();
+            startNewLevel();
+            Game.isReady = true;
+        }
+    </script>
+</body>
+</html>
