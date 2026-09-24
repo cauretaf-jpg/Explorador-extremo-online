@@ -1,6 +1,16 @@
-# Explorador Extremo V13.2.1 · estabilización multijugador
+# Explorador Extremo V13.2.2 · corrección de mejoras
 
 Copia independiente del juego del profesor Juan Neira (crédito conservado en pantalla). V13 mantiene el modo individual y cooperativo y agrega persistencia de perfiles, estadísticas y ranking con Supabase.
+
+## Novedades V13.2.2
+
+- Corregida la pantalla **Mejora de Expedición** que impedía hacer clic en las tarjetas.
+- La causa era un rerender completo de los botones en cada frame mientras la partida estaba pausada.
+- `renderUpgrade()` ahora conserva las tarjetas mientras nivel/opciones/rol no cambien.
+- El loop principal deja de reconstruir la pantalla de mejora ~60 veces por segundo.
+- `pointer-events` y `touch-action` quedan explícitos para mouse y táctil.
+- Nueva prueba automática que verifica que renders repetidos conservan el mismo botón y que el clic ejecuta la elección.
+- Paquete **1.3.4**.
 
 ## Novedades V13.2.1
 

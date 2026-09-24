@@ -30,32 +30,52 @@ function updateLevelObjective(data) {
   byId('level-objective-text').textContent = data.objective;
 }
 
+let upgradeRenderKey = null;
+
 function renderUpgrade(data) {
   const screen = byId('upgrade-screen');
   if (!data.visible) {
     screen.style.display = 'none';
+    screen.style.pointerEvents = 'none';
+    upgradeRenderKey = null;
     return;
   }
 
   screen.style.display = 'flex';
-  byId('upgrade-subtitle').textContent = data.subtitle;
+  screen.style.pointerEvents = 'auto';
+  byId('upgrade-subtitle').textContent = data.subtitle || '';
+  byId('upgrade-waiting').textContent = data.waiting || '';
+
+  const choices = data.choices || [];
+  const renderKey = JSON.stringify({
+    subtitle: data.subtitle || '',
+    canChoose: !!data.canChoose,
+    choices: choices.map(choice => choice.id)
+  });
+
+  // El loop del juego puede pedir este render muchas veces mientras está pausado.
+  // Conservar los botones evita destruir el target entre pointerdown y click.
+  if (renderKey === upgradeRenderKey) return;
+  upgradeRenderKey = renderKey;
 
   const options = byId('upgrade-options');
-  options.innerHTML = '';
+  options.replaceChildren();
 
-  for (const upgrade of data.choices || []) {
+  for (const upgrade of choices) {
     const button = document.createElement('button');
     button.type = 'button';
     button.className = 'upgrade-card';
     button.disabled = !data.canChoose;
+    button.dataset.upgradeId = upgrade.id;
+    button.setAttribute('aria-label', 'Elegir ' + upgrade.name);
     button.innerHTML =
       '<strong>' + upgrade.name + '</strong>' +
       '<span>' + upgrade.description + '</span>';
-    button.onclick = () => data.onChoose?.(upgrade.id);
+    button.addEventListener('click', () => {
+      if (!button.disabled) data.onChoose?.(upgrade.id);
+    });
     options.appendChild(button);
   }
-
-  byId('upgrade-waiting').textContent = data.waiting || '';
 }
 
 function setGamePanelsVisible(visible) {
