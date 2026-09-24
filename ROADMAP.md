@@ -1,17 +1,17 @@
 # Roadmap de desarrollo · Explorador Extremo Online
 
-Estado actualizado para V12.5.
+Estado actualizado para V12.6.
 
 | Prioridad | Mejora | Estado | Siguiente objetivo |
 |---|---|---|---|
 | 1 | Estabilizar modo online | Implementado / validación | Pruebas de estrés con dos dispositivos y cortes reales |
 | 2 | Lobby cooperativo | Implementado | Pulido de UX |
 | 3 | Cooperación real | Implementado | Más puzzles y objetivos asimétricos |
-| 4 | Separar el código | Avanzado | Ya se extrajeron combate, sesión online, niveles, progresión y audio; siguen UI general y motor de juego |
+| 4 | Separar el código | Muy avanzado | Combate, red, niveles, progresión, audio y parte relevante de UI ya están modularizados; queda extraer el motor principal/escena |
 | 5 | Mejorar combate | Avanzado | Sistema de arma, cargador, recarga y mejoras implementado; faltan más armas/power-ups físicos |
 | 6 | Mejor progresión | Implementado / expansión | Objetivos 1–11 y mejoras entre niveles; se puede profundizar con más eventos exclusivos |
 | 7 | Ranking y perfiles | Pendiente | Supabase Auth/estadísticas persistentes |
-| 8 | Modo móvil | Pendiente | Joystick, disparo y cámara táctil |
+| 8 | Modo móvil | Implementado / validación | Probar en Android/iOS y ajustar tamaños/sensibilidad según dispositivo |
 | 9 | Logros y desafíos | Pendiente | Sistema persistente de objetivos |
 | 10 | Pulido audiovisual | Parcial | Feedback de impacto, menús y audio |
 
@@ -54,13 +54,14 @@ Estado actualizado para V12.5.
 - Evolución del arma según mejoras.
 - Extracción de `src/progression/config.js` y `src/audio/engine.js`.
 
-## Próximas versiones propuestas
+### V12.6
+- Joystick analógico táctil.
+- Disparo, recarga e interacción táctiles.
+- Cámara por arrastre y zoom táctil.
+- HUD adaptable y soporte de safe areas.
+- Extracción de `src/ui/mobile-controls.js`, `src/ui/mobile.css` y `src/ui/hud.js`.
 
-### V12.6 · UI + móvil
-- Extraer UI general del HTML.
-- Controles táctiles y joystick virtual.
-- Cámara adaptada a pantallas pequeñas.
-- Botones táctiles de disparo, recarga e interacción.
+## Próximas versiones propuestas
 
 ### V13 · Persistencia
 - Perfil de jugador.

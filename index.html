@@ -12,6 +12,9 @@
     <script src="./levels-config.js"></script>
     <script src="./progression-config.js"></script>
     <script src="./audio-engine.js"></script>
+    <script src="./mobile-controls.js"></script>
+    <script src="./ui-hud.js"></script>
+    <link rel="stylesheet" href="./mobile.css">
     <style>
         * {
             box-sizing: border-box;
@@ -620,7 +623,7 @@
     <div id="menu-screen" class="overlay">
         <h1>Explorador Extremo 3D</h1>
         <div class="author-tag">Autor del Juego: Profesor Juan Neira</div>
-        <div class="subtitle">V12.5 · Progresión de expedición</div>
+        <div class="subtitle">V12.6 · Modo móvil y UI modular</div>
         <button class="btn" id="btn-start">Jugar solo</button>
 
         <div id="online-entry">
@@ -661,8 +664,9 @@
             • Nivel 3: <strong>derroten al Guardián del Desierto para abrir el portal</strong><br>
             • Progresión: <strong>elige una mejora de equipo entre niveles</strong><br>
             • Online: <strong>la partida se pausa y reconecta automáticamente ante cortes breves</strong><br>
-            • Rotar Vista 360°: <strong>Mantener Click Izquierdo y arrastrar</strong><br>
-            • Zoom de Perspectiva: <strong>Rueda del Mouse (Scroll)</strong><br><br>
+            • Rotar Vista 360°: <strong>Mouse o arrastre táctil sobre la escena</strong><br>
+            • Zoom de Perspectiva: <strong>Scroll o botones + / − en móvil</strong><br>
+            • Móvil: <strong>joystick virtual + disparo, recarga e interacción táctil</strong><br><br>
             ¡Recorre los biomas evitando trampas y enemigos en caminos 3D!
         </div>
     </div>
@@ -1628,6 +1632,7 @@
         // --- ESTADO Y CONFIGURACIÓN GLOBAL ---
         const playerHeight = 1.7; // Altura exacta de la entidad explorador extremo
         const Progression = window.ExploradorProgression;
+        const UI = window.ExploradorUI;
 
         const Combat = window.ExploradorCombatConfig || {
             getEnemyProfile: () => ({ role:'hunter', hp:3, damage:25, speed:1, attackCooldown:1.1 }),
@@ -1654,6 +1659,7 @@
             biomes: ['Selva', 'Montaña', 'Desierto', 'Bosque'],
             currentBiome: 'Selva',
             keys: { ArrowUp: false, ArrowDown: false, ArrowLeft: false, ArrowRight: false, Interact: false },
+            mobileMove: { x: 0, y: 0 },
             isReady: false,
             gameOver: false,
             clock: new THREE.Clock(),
@@ -3051,6 +3057,7 @@
             Game.gameOver = true;
             Game.isReady = false;
             AudioEngine.stopAmbient();
+            setMobileGameActive(false);
             document.getElementById('victory-time').innerText = formatTime(Game.time);
             document.getElementById('victory-score').innerText = Game.score;
             document.getElementById('upgrade-screen').style.display = 'none';
@@ -3345,21 +3352,14 @@
                 ? (Net.guestInfo?.name || 'Explorador 2')
                 : (Net.hostInfo?.name || 'Anfitrión');
 
-            const localHp = Math.max(0, Math.round(Game.health[localRole] ?? Game.maxHealth));
-            document.getElementById('local-health-name').textContent = localName;
-            document.getElementById('local-health-value').textContent = localHp + '/' + Game.maxHealth;
-            document.getElementById('local-health-fill').style.width = (localHp / Game.maxHealth * 100) + '%';
-
-            const mateRow = document.getElementById('mate-health-row');
-            if (Net.role === 'solo') {
-                mateRow.style.display = 'none';
-            } else {
-                mateRow.style.display = 'block';
-                const mateHp = Math.max(0, Math.round(Game.health[mateRole] ?? Game.maxHealth));
-                document.getElementById('mate-health-name').textContent = mateName;
-                document.getElementById('mate-health-value').textContent = mateHp + '/' + Game.maxHealth;
-                document.getElementById('mate-health-fill').style.width = (mateHp / Game.maxHealth * 100) + '%';
-            }
+            UI.updateHealth({
+                localName,
+                localHp: Math.max(0, Math.round(Game.health[localRole] ?? Game.maxHealth)),
+                maxHealth: Game.maxHealth,
+                showMate: Net.role !== 'solo',
+                mateName,
+                mateHp: Math.max(0, Math.round(Game.health[mateRole] ?? Game.maxHealth))
+            });
         }
 
         function updateBossHUD(authoritativeBoss = undefined) {
@@ -3394,9 +3394,11 @@
 
         function updateLevelObjective() {
             const profile = Progression.getLevelProfile(Game.level);
-            document.getElementById('level-objective-title').textContent =
-                'Nivel ' + Game.level + ' · ' + profile.title;
-            document.getElementById('level-objective-text').textContent = profile.objective;
+            UI.updateLevelObjective({
+                level: Game.level,
+                title: profile.title,
+                objective: profile.objective
+            });
         }
 
         function updateWeaponHUD() {
@@ -3410,49 +3412,38 @@
                     p.ammo[r] = p.weapon.magazineSize;
                 }
             }
-            document.getElementById('weapon-name').textContent =
-                p.weapon.name + ' · DMG ' + p.weapon.damage;
-            document.getElementById('weapon-ammo').textContent =
-                (p.ammo[role] ?? 0) + '/' + p.weapon.magazineSize;
             const remaining = p.reloadUntil[role]
                 ? Math.max(0, (p.reloadUntil[role] - now) / 1000)
                 : 0;
-            document.getElementById('weapon-status').textContent =
-                remaining > 0 ? 'RECARGANDO ' + remaining.toFixed(1) + 's' : 'LISTO';
+            UI.updateWeapon({
+                name: p.weapon.name,
+                damage: p.weapon.damage,
+                ammo: p.ammo[role] ?? 0,
+                magazineSize: p.weapon.magazineSize,
+                status: remaining > 0 ? 'RECARGANDO ' + remaining.toFixed(1) + 's' : 'LISTO'
+            });
         }
 
         function updateUpgradeScreen() {
-            const screen = document.getElementById('upgrade-screen');
-            if (!Game.progressionPaused || !Game.pendingUpgradeLevel) {
-                screen.style.display = 'none';
+            const visible = !!Game.progressionPaused && !!Game.pendingUpgradeLevel;
+            if (!visible) {
+                UI.renderUpgrade({ visible: false });
+                if (Game.isReady && !Game.gameOver) setMobileGameActive(true);
                 return;
             }
 
-            screen.style.display = 'flex';
-            document.getElementById('upgrade-subtitle').textContent =
-                'Nivel ' + Game.pendingUpgradeLevel + ' superado · prepara el equipo para el nivel ' + Game.level;
-
-            const options = document.getElementById('upgrade-options');
-            const waiting = document.getElementById('upgrade-waiting');
+            setMobileGameActive(false);
             const canChoose = Net.role !== 'guest';
-            const choices = Progression.getUpgradeChoices(Game.level);
-            options.innerHTML = '';
-
-            for (const upgrade of choices) {
-                const button = document.createElement('button');
-                button.type = 'button';
-                button.className = 'upgrade-card';
-                button.disabled = !canChoose;
-                button.innerHTML =
-                    '<strong>' + upgrade.name + '</strong>' +
-                    '<span>' + upgrade.description + '</span>';
-                button.onclick = () => chooseTeamUpgrade(upgrade.id);
-                options.appendChild(button);
-            }
-
-            waiting.textContent = canChoose
-                ? 'La mejora se aplica a toda la expedición.'
-                : 'Esperando que el anfitrión elija la mejora del equipo…';
+            UI.renderUpgrade({
+                visible: true,
+                subtitle: 'Nivel ' + Game.pendingUpgradeLevel + ' superado · prepara el equipo para el nivel ' + Game.level,
+                choices: Progression.getUpgradeChoices(Game.level),
+                canChoose,
+                onChoose: chooseTeamUpgrade,
+                waiting: canChoose
+                    ? 'La mejora se aplica a toda la expedición.'
+                    : 'Esperando que el anfitrión elija la mejora del equipo…'
+            });
         }
 
         function chooseTeamUpgrade(id) {
@@ -3468,6 +3459,7 @@
             Game.progressionPaused = false;
             Game.pendingUpgradeLevel = null;
             document.getElementById('upgrade-screen').style.display = 'none';
+            setMobileGameActive(true);
             Net.status(Net.role === 'solo'
                 ? 'Mejora aplicada: ' + upgrade.name
                 : 'Mejora de equipo aplicada: ' + upgrade.name);
@@ -3547,6 +3539,7 @@
             Game.gameOver = true;
             Game.isReady = false;
             AudioEngine.stopAmbient();
+            setMobileGameActive(false);
             document.getElementById('final-time').innerText = formatTime(Game.time);
             document.getElementById('final-score').innerText = Game.score;
             document.getElementById('upgrade-screen').style.display = 'none';
@@ -3626,7 +3619,56 @@
         // Evita que una tecla quede "pegada" al cambiar de pestaña o perder foco.
         window.addEventListener('blur', () => {
             Object.keys(Game.keys).forEach(key => Game.keys[key] = false);
+            Game.mobileMove.x = 0;
+            Game.mobileMove.y = 0;
         });
+
+        let MobileController = null;
+
+        function setMobileGameActive(active) {
+            MobileController?.setGameActive?.(!!active);
+        }
+
+        function setupMobileController() {
+            if (MobileController || !window.ExploradorMobileControls) return;
+            MobileController = window.ExploradorMobileControls.createMobileControls({
+                cameraSurface: container,
+                onMove(x, y) {
+                    Game.mobileMove.x = Number.isFinite(x) ? x : 0;
+                    Game.mobileMove.y = Number.isFinite(y) ? y : 0;
+                },
+                onFire() {
+                    if (!Game.isReady || Game.gameOver || Game.progressionPaused || isLocalDowned()) return;
+                    if (Net.role !== 'solo' && !Net.peerConnected) return;
+                    if (Net.role === 'guest') Net.send({ type: 'shoot' });
+                    else fireArrow();
+                },
+                onReload() {
+                    if (!Game.isReady || Game.gameOver || Game.progressionPaused) return;
+                    reloadWeapon();
+                },
+                onInteract(active) {
+                    if (!Game.isReady || Game.gameOver || Game.progressionPaused) return;
+                    Game.keys.Interact = !!active;
+                },
+                onLook(dx, dy) {
+                    if (!Game.isReady || Game.gameOver || Game.cinematic.active || Game.progressionPaused) return;
+                    Game.cameraOrbit.theta -= dx * 0.007;
+                    Game.cameraOrbit.phi -= dy * 0.007;
+                    Game.cameraOrbit.phi = Math.max(0.2, Math.min(Math.PI / 2.05, Game.cameraOrbit.phi));
+                },
+                onZoom(delta) {
+                    if (!Game.isReady || Game.gameOver || Game.cinematic.active) return;
+                    Game.cameraOrbit.radius += delta;
+                    Game.cameraOrbit.radius = Math.max(
+                        Game.cameraOrbit.minRadius,
+                        Math.min(Game.cameraOrbit.maxRadius, Game.cameraOrbit.radius)
+                    );
+                }
+            });
+        }
+
+        setupMobileController();
 
         // --- SISTEMA DE COLISIONES SENIOR CON MUROS DE GROSOR 0.5X ---
         function checkMazeCollision(posX, posZ) {
@@ -3710,6 +3752,14 @@
                 if (Game.keys.ArrowDown) { moveVector.add(forward.clone().negate()); moving = true; }
                 if (Game.keys.ArrowLeft) { moveVector.add(right.clone().negate()); moving = true; }
                 if (Game.keys.ArrowRight) { moveVector.add(right); moving = true; }
+
+                const mx = Game.mobileMove.x || 0;
+                const my = Game.mobileMove.y || 0;
+                if (Math.hypot(mx, my) > 0.08) {
+                    moveVector.addScaledVector(forward, my);
+                    moveVector.addScaledVector(right, mx);
+                    moving = true;
+                }
             }
 
             if (moving) {
@@ -4162,6 +4212,7 @@
             if (!restored) startNewLevel();
             Game.isReady = true;
             Game.clock.start();
+            setMobileGameActive(true);
             if (Net.role === 'host') Net.makeRemote();
             if (restored && Net.role === 'host' && Net.remote && snapshot?.guest) {
                 Net.remote.position.set(snapshot.guest.x, 0, snapshot.guest.z);
@@ -4231,6 +4282,7 @@
             updateWeaponHUD();
             startNewLevel();
             Game.isReady = true;
+            setMobileGameActive(true);
         }
     </script>
 </body>
