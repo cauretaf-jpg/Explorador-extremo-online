@@ -1,6 +1,38 @@
-# Explorador Extremo V13.1 · logros e insignias
+# Explorador Extremo V13.2 · modo batalla multijugador
 
 Copia independiente del juego del profesor Juan Neira (crédito conservado en pantalla). V13 mantiene el modo individual y cooperativo y agrega persistencia de perfiles, estadísticas y ranking con Supabase.
+
+## Novedades V13.2
+
+- Nuevo **Modo Batalla** separado de Expedición y Cooperativo.
+- Salas de **2 a 8 jugadores** mediante Supabase Realtime.
+- Un jugador crea la sala y recibe un código de seis dígitos.
+- Los demás participantes se unen con el código o con un enlace `?batalla=XXXXXX`.
+- Lobby dinámico que muestra todos los participantes, no solo Jugador 1/Jugador 2.
+- Cada participante tiene nombre, color y estado **LISTO / ESPERANDO**.
+- El anfitrión solo puede iniciar cuando hay al menos 2 jugadores y todos están listos.
+- Límite estricto de 8 participantes, con rechazo de ingresos excedentes incluso ante uniones simultáneas.
+- Arena 3D propia con obstáculos, paredes y ocho puntos de aparición.
+- Combate **todos contra todos**:
+  - 100 HP,
+  - 25 de daño por impacto,
+  - respawn automático tras 2,5 segundos,
+  - bajas y muertes individuales.
+- Condiciones de victoria:
+  - primer jugador en alcanzar **10 bajas**, o
+  - mayor cantidad de bajas al terminar **5 minutos**.
+- Clasificación en vivo con bajas y muertes.
+- El anfitrión mantiene autoridad sobre daño, proyectiles, respawn, tiempo y resultado.
+- Clientes invitados envían posición y disparos mediante Broadcast; el anfitrión valida desplazamientos básicos y distribuye snapshots.
+- Los jugadores desconectados dejan de ser objetivos y desaparecen visualmente.
+- Controles de escritorio: WASD/Flechas + Espacio.
+- Controles táctiles básicos en móvil: joystick + botón de disparo.
+- Invitación y lobby de Batalla usan un canal distinto a Expedición, por lo que no modifican el cooperativo existente.
+- Nuevos módulos:
+  - `src/battle/mode.js`,
+  - `src/battle/battle.css`.
+
+Esta primera versión de Batalla no suma todavía sus bajas/victorias al perfil global de Expedición. Esa persistencia competitiva puede añadirse después de validar el modo con varios dispositivos reales.
 
 ## Novedades V13.1
 
@@ -186,7 +218,7 @@ El proyecto configurado en `supabase.public.json` usa exclusivamente URL y clave
 1. Importa este repositorio en Vercel.
 2. El comando `npm run build` genera `dist/`, según `vercel.json`.
 3. `SUPABASE_URL` y `SUPABASE_PUBLISHABLE_KEY` son opcionales; si no están definidas, el build usa `supabase.public.json`.
-4. Prueba el despliegue desde dos navegadores o dispositivos distintos: uno crea la sala y comparte el enlace; el otro se une, ambos marcan **Estoy listo** y el anfitrión inicia la expedición.
+4. Para Expedición cooperativa, prueba desde dos navegadores/dispositivos. Para Batalla, prueba idealmente con 3 o más clientes: uno crea la sala, comparte el código/enlace, todos marcan **Listo** y el anfitrión inicia.
 
 ## Desarrollo local
 
@@ -202,4 +234,4 @@ La versión del curso tenía un cierre de testing el 3 de octubre de 2026. Esta 
 
 ## Validación
 
-La sintaxis del script principal y de los módulos se comprueba antes de publicar y Vercel debe completar el build. Para V13 también se valida RLS/permisos, la función atómica de estadísticas y la idempotencia de `match_id`. La validación funcional final debe cubrir creación/renombre de perfil, ranking, victoria/derrota, escritorio, móvil y dos clientes online.
+La sintaxis del script principal y de los módulos se comprueba antes de publicar y Vercel debe completar el build. Para V13 también se valida RLS/permisos y persistencia. V13.2 añade una validación específica de Batalla: creación/unión con 2–8 clientes, límite de sala, ready-check, movimiento, disparos, respawn, clasificación y resultado final.
