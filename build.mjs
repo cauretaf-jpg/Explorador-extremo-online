@@ -8,6 +8,7 @@ const dist = path.join(root, 'dist');
 fs.mkdirSync(dist, { recursive: true });
 for (const name of ['index.html']) fs.copyFileSync(path.join(root, name), path.join(dist, name));
 fs.copyFileSync(path.join(root, 'src/ui/mobile.css'), path.join(dist, 'mobile.css'));
+fs.copyFileSync(path.join(root, 'src/ui/profile.css'), path.join(dist, 'profile.css'));
 fs.copyFileSync(path.join(root, 'node_modules/three/build/three.min.js'), path.join(dist, 'three.min.js'));
 await build({ entryPoints: [path.join(root, 'src/supabase-client.js')], bundle: true, minify: true,
   format: 'iife', platform: 'browser', outfile: path.join(dist, 'supabase-client.js') });
@@ -25,6 +26,10 @@ await build({ entryPoints: [path.join(root, 'src/ui/mobile-controls.js')], bundl
   format: 'iife', platform: 'browser', outfile: path.join(dist, 'mobile-controls.js') });
 await build({ entryPoints: [path.join(root, 'src/ui/hud.js')], bundle: true, minify: true,
   format: 'iife', platform: 'browser', outfile: path.join(dist, 'ui-hud.js') });
+await build({ entryPoints: [path.join(root, 'src/profile/client.js')], bundle: true, minify: true,
+  format: 'iife', platform: 'browser', outfile: path.join(dist, 'profile-client.js') });
+await build({ entryPoints: [path.join(root, 'src/ui/profile-panel.js')], bundle: true, minify: true,
+  format: 'iife', platform: 'browser', outfile: path.join(dist, 'profile-panel.js') });
 const defaults = JSON.parse(fs.readFileSync(path.join(root, 'supabase.public.json'), 'utf8'));
 const config = {
   url: process.env.SUPABASE_URL || defaults.url,
