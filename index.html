@@ -7,6 +7,7 @@
     <script src="./three.min.js"></script>
     <script src="./supabase-client.js"></script>
     <script src="./config.js"></script>
+    <script src="./combat-config.js"></script>
     <style>
         * {
             box-sizing: border-box;
@@ -413,6 +414,46 @@
             border-color: rgba(255,70,70,0.8);
             background: rgba(35,5,5,0.9);
         }
+        #combat-hud {
+            position: absolute;
+            right: 16px;
+            bottom: 18px;
+            z-index: 71;
+            width: min(320px, 42vw);
+            padding: 11px 14px;
+            border-radius: 12px;
+            border: 1px solid rgba(255,255,255,0.22);
+            background: rgba(5,10,8,0.86);
+            color: #fff;
+            pointer-events: none;
+        }
+        .health-row { margin: 5px 0; font-size: 0.82rem; font-weight: 800; }
+        .health-label { display:flex; justify-content:space-between; gap:10px; margin-bottom:4px; }
+        .health-track { height:8px; border-radius:6px; overflow:hidden; background:rgba(255,255,255,0.13); }
+        .health-fill { height:100%; width:100%; background:linear-gradient(90deg,#ff3b3b,#54ff7a); transition:width .16s ease; }
+        #boss-hud {
+            position:absolute;
+            top:100px;
+            left:50%;
+            transform:translateX(-50%);
+            z-index:72;
+            width:min(520px,76vw);
+            padding:10px 16px;
+            border-radius:12px;
+            border:1px solid rgba(255,190,70,.7);
+            background:rgba(24,10,2,.88);
+            color:#fff;
+            text-align:center;
+            font-weight:900;
+            display:none;
+            pointer-events:none;
+        }
+        #boss-health-track { height:10px; margin-top:7px; border-radius:6px; overflow:hidden; background:rgba(255,255,255,.14); }
+        #boss-health-fill { height:100%; width:100%; background:linear-gradient(90deg,#ff4d00,#ffd000); transition:width .15s ease; }
+        #damage-flash {
+            position:absolute; inset:0; z-index:65; pointer-events:none;
+            background:rgba(255,0,0,.22); opacity:0; transition:opacity .16s ease;
+        }
         @media (max-width: 700px) {
             h1 { font-size: 2.45rem; }
             .btn { padding: 12px 22px; font-size: 1rem; }
@@ -459,6 +500,22 @@
         <div id="revive-progress-track"><div id="revive-progress-fill"></div></div>
     </div>
     <div id="teammate-marker">Compañero</div>
+    <div id="combat-hud">
+        <div class="health-row">
+            <div class="health-label"><span id="local-health-name">Explorador</span><span id="local-health-value">100/100</span></div>
+            <div class="health-track"><div id="local-health-fill" class="health-fill"></div></div>
+        </div>
+        <div class="health-row" id="mate-health-row" style="display:none">
+            <div class="health-label"><span id="mate-health-name">Compañero</span><span id="mate-health-value">100/100</span></div>
+            <div class="health-track"><div id="mate-health-fill" class="health-fill"></div></div>
+        </div>
+    </div>
+    <div id="boss-hud">
+        <div id="boss-name">Guardián del Desierto</div>
+        <div id="boss-status" style="font-size:.78rem;color:#ffd36a;margin-top:2px"></div>
+        <div id="boss-health-track"><div id="boss-health-fill"></div></div>
+    </div>
+    <div id="damage-flash"></div>
 
     <div id="level-cinematic-banner">
         <div id="level-cinematic-title">Nivel 1</div>
@@ -480,7 +537,7 @@
     <div id="menu-screen" class="overlay">
         <h1>Explorador Extremo 3D</h1>
         <div class="author-tag">Autor del Juego: Profesor Juan Neira</div>
-        <div class="subtitle">V12.2 · Expedición cooperativa online</div>
+        <div class="subtitle">V12.3 · Combate cooperativo</div>
         <button class="btn" id="btn-start">Jugar solo</button>
 
         <div id="online-entry">
@@ -515,6 +572,8 @@
             • Disparar Rifle de Expedición: <strong>Barra Espaciadora</strong><br>
             • Reanimar compañero: <strong>Mantener E cerca del jugador caído</strong><br>
             • Cooperativo: <strong>activen las dos placas simultáneamente desde el nivel 2</strong><br>
+            • Salud: <strong>busca botiquines para recuperar HP</strong><br>
+            • Nivel 3: <strong>derroten al Guardián del Desierto para abrir el portal</strong><br>
             • Rotar Vista 360°: <strong>Mantener Click Izquierdo y arrastrar</strong><br>
             • Zoom de Perspectiva: <strong>Rueda del Mouse (Scroll)</strong><br><br>
             ¡Recorre los biomas evitando trampas y enemigos en caminos 3D!
@@ -1306,12 +1365,17 @@
                     ...Game.prizes.map(p => ({ kind: 'prize', x: p.x, z: p.z, points: p.points })),
                     ...Game.enemies.map(e => ({ kind: 'enemy', x: e.x, z: e.z })),
                     ...Game.traps.map(t => ({ kind: 'trap', x: t.x, z: t.z })),
+                    ...Game.medkits.map(m => ({ kind: 'medkit', x: m.x, z: m.z })),
                     ...Game.coopPlates.map(p => ({ kind: 'plate', id: p.id, x: p.x, z: p.z }))
                 ];
                 this.send({ type: 'state', state: {
                     level: Game.level, maze: Game.maze, layout,
-                    enemies: Game.enemies.map(e => ({ x: e.x, z: e.z, px: e.mesh.position.x, pz: e.mesh.position.z })),
+                    enemies: Game.enemies.map(e => ({
+                        x: e.x, z: e.z, px: e.mesh.position.x, pz: e.mesh.position.z,
+                        hp: e.hp, maxHp: e.maxHp, role: e.role, isBoss: !!e.isBoss
+                    })),
                     prizes: Game.prizes.map(p => ({ x: p.x, z: p.z })),
+                    medkits: Game.medkits.map(m => ({ x: m.x, z: m.z })),
                     shots: Game.arrows.map(a => ({ x: a.mesh.position.x, y: a.mesh.position.y, z: a.mesh.position.z })),
                     enemyShots: Game.enemyProjectiles.map(a => ({ x: a.mesh.position.x, y: a.mesh.position.y, z: a.mesh.position.z })),
                     player: { x: playerMesh.position.x, z: playerMesh.position.z, angle: playerMesh.rotation.y },
@@ -1325,6 +1389,12 @@
                     coopDowned: Game.coopDowned,
                     reviveProgress: Game.reviveProgress,
                     reviveTarget: Game.reviveTarget,
+                    health: Game.health,
+                    bossDefeated: Game.bossDefeated,
+                    boss: Game.boss ? {
+                        hp: Game.boss.hp, maxHp: Game.boss.maxHp,
+                        name: Game.boss.name, shielded: !isBossVulnerable()
+                    } : null,
                     gameOver: Game.gameOver
                 }});
             },
@@ -1359,9 +1429,17 @@
                 Game.coopDowned = state.coopDowned || { host: false, guest: false, hostTimer: 0, guestTimer: 0 };
                 Game.reviveProgress = state.reviveProgress || 0;
                 Game.reviveTarget = state.reviveTarget || null;
+                Game.health = state.health || Game.health;
+                Game.bossDefeated = !!state.bossDefeated;
+                if (state.boss && Game.boss) {
+                    Game.boss.hp = state.boss.hp;
+                    Game.boss.maxHp = state.boss.maxHp;
+                    Game.boss.name = state.boss.name;
+                }
                 syncDownedVisuals();
                 syncCoopPlateVisuals();
                 updateHUD();
+                updateBossHUD(state.boss);
                 updateCoopObjective(
                     !!Game.portalStatus.guestAtGoal,
                     !!Game.portalStatus.hostAtGoal,
@@ -1378,8 +1456,22 @@
                 for (let i = Game.enemies.length - 1; i >= 0; i--) {
                     const e = Game.enemies[i];
                     const authoritative = state.enemies.find(q => q.x === e.x && q.z === e.z);
-                    if (!authoritative) { mazeGroup.remove(e.mesh); Game.enemies.splice(i, 1); }
-                    else e.mesh.position.set(authoritative.px, 0, authoritative.pz);
+                    if (!authoritative) {
+                        mazeGroup.remove(e.mesh);
+                        if (e.isBoss) Game.boss = null;
+                        Game.enemies.splice(i, 1);
+                    } else {
+                        e.mesh.position.set(authoritative.px, 0, authoritative.pz);
+                        e.hp = authoritative.hp;
+                        e.maxHp = authoritative.maxHp;
+                        e.role = authoritative.role;
+                    }
+                }
+                for (let i = Game.medkits.length - 1; i >= 0; i--) {
+                    const m = Game.medkits[i];
+                    if (!(state.medkits || []).some(q => q.x === m.x && q.z === m.z)) {
+                        mazeGroup.remove(m.mesh); Game.medkits.splice(i, 1);
+                    }
                 }
                 if (!this.shotGroup) {
                     this.shotGroup = new THREE.Group(); scene.add(this.shotGroup);
@@ -1423,6 +1515,11 @@
 
         // --- ESTADO Y CONFIGURACIÓN GLOBAL ---
         const playerHeight = 1.7; // Altura exacta de la entidad explorador extremo
+        const Combat = window.ExploradorCombatConfig || {
+            getEnemyProfile: () => ({ role:'hunter', hp:3, damage:25, speed:1, attackCooldown:1.1 }),
+            combatRules: { maxHealth:100, reviveHealth:50, medkitHeal:35, medkitsPerLevel:2, bulletDamage:1,
+                boss:{ level:3, name:'Guardián del Desierto', hp:28, damage:44, attackCooldown:1.15, speedMultiplier:.68, score:3500 } }
+        };
         
         const Game = {
             score: 0,
@@ -1451,6 +1548,11 @@
             extraLifeThreshold: 15000,
             portalCharge: 0,
             portalStatus: { hostAtGoal: false, guestAtGoal: false },
+            maxHealth: Combat.combatRules.maxHealth,
+            health: { solo: Combat.combatRules.maxHealth, host: Combat.combatRules.maxHealth, guest: Combat.combatRules.maxHealth },
+            medkits: [],
+            boss: null,
+            bossDefeated: false,
             coopPlates: [],
             platesUnlocked: false,
             plateCharge: 0,
@@ -1725,6 +1827,8 @@
             Game.enemyProjectiles = [];
             Game.portalTowers = [];
             Game.coopPlates = [];
+            Game.medkits = [];
+            Game.boss = null;
 
             let conf = BiomeConfigs[Game.currentBiome];
             scene.background = new THREE.Color(conf.fogColor);
@@ -1782,12 +1886,18 @@
                         let rand = Net.role === 'guest' ? -1 : Math.random();
                         if (layout?.kind === 'prize') {
                             spawnPrize(posX, posZ, layout.points);
+                        } else if (layout?.kind === 'medkit') {
+                            spawnMedkit(posX, posZ);
+                        } else if (layout?.kind === 'boss') {
+                            spawnMiniBoss(posX, posZ);
                         } else if (layout?.kind === 'enemy') {
                             spawnEnemy(posX, posZ);
                         } else if (layout?.kind === 'trap') {
                             spawnTrap(posX, posZ, Game.level);
                         } else if(rand < prizeChance) {
                             spawnPrize(posX, posZ);
+                        } else if(rand < prizeChance + 0.045 && Game.medkits.length < Combat.combatRules.medkitsPerLevel) {
+                            spawnMedkit(posX, posZ);
                         } else if(rand > 0.95 && Game.enemies.length < (2 + Game.level)) {
                             spawnEnemy(posX, posZ);
                         } else if(Game.level >= 7 && rand > 0.90 && rand <= 0.95) {
@@ -1798,11 +1908,89 @@
                 }
             }
 
+            if (Game.level === Combat.combatRules.boss.level && Net.role !== 'guest') {
+                const bossCell = findBossSpawnCell();
+                if (bossCell) spawnMiniBoss(bossCell.x * Game.cellSize, bossCell.z * Game.cellSize);
+            }
+
             if(Game.enemies.length === 0 && Net.role !== 'guest') spawnEnemy((Game.gridSize-2)*Game.cellSize, (Game.gridSize-2)*Game.cellSize);
 
             // --- NUEVO: Torres-Portal de inicio y meta en todos los niveles (1 al 11) ---
             createPortalTower(1 * Game.cellSize, 1 * Game.cellSize, true, Game.level);
             createPortalTower((Game.gridSize-2) * Game.cellSize, (Game.gridSize-2) * Game.cellSize, false, Game.level);
+        }
+
+        function spawnMedkit(x, z) {
+            const group = new THREE.Group();
+            const box = new THREE.Mesh(
+                new THREE.BoxGeometry(0.72, 0.38, 0.58),
+                new THREE.MeshStandardMaterial({ color: 0xffffff, roughness: 0.55 })
+            );
+            box.position.y = 0.38;
+            const crossMat = new THREE.MeshBasicMaterial({ color: 0xff3030 });
+            const h = new THREE.Mesh(new THREE.BoxGeometry(0.42, 0.09, 0.04), crossMat);
+            const v = new THREE.Mesh(new THREE.BoxGeometry(0.09, 0.3, 0.04), crossMat);
+            h.position.set(0, 0.39, 0.31); v.position.set(0, 0.39, 0.31);
+            group.add(box, h, v);
+            group.position.set(x, 0, z);
+            group.traverse(o => { if (o.isMesh) o.castShadow = true; });
+            mazeGroup.add(group);
+            Game.medkits.push({ mesh: group, x, z });
+        }
+
+        function findBossSpawnCell() {
+            const occupied = (wx, wz) =>
+                Game.enemies.some(e => e.x === wx && e.z === wz) ||
+                Game.prizes.some(p => p.x === wx && p.z === wz) ||
+                Game.medkits.some(m => m.x === wx && m.z === wz) ||
+                Game.coopPlates.some(p => p.x === wx && p.z === wz);
+            const goal = Game.gridSize - 2;
+            let best = null;
+            for (let x = 1; x < Game.gridSize - 1; x++) {
+                for (let z = 1; z < Game.gridSize - 1; z++) {
+                    if (Game.maze[x][z] !== 0) continue;
+                    if ((x === 1 && z === 1) || (x === goal && z === goal)) continue;
+                    const wx = x * Game.cellSize, wz = z * Game.cellSize;
+                    if (occupied(wx, wz)) continue;
+                    const distGoal = Math.hypot(x - goal, z - goal);
+                    const distStart = Math.hypot(x - 1, z - 1);
+                    if (distGoal < 2 || distStart < 5) continue;
+                    const score = distGoal + Math.abs(distStart - distGoal) * 0.15;
+                    if (!best || score < best.score) best = { x, z, score };
+                }
+            }
+            return best;
+        }
+
+        function spawnMiniBoss(x, z) {
+            const cfg = Combat.combatRules.boss;
+            const model = createEnemyModel('Oso');
+            model.scale.setScalar(1.7);
+            model.traverse(obj => {
+                if (!obj.isMesh) return;
+                obj.material = obj.material.clone();
+                if ('emissive' in obj.material) {
+                    obj.material.emissive = new THREE.Color(0xff5a00);
+                    obj.material.emissiveIntensity = 0.25;
+                }
+            });
+            model.position.set(x, 0, z);
+            mazeGroup.add(model);
+            const boss = {
+                mesh: model, type: cfg.name, name: cfg.name, role: 'boss',
+                speed: (1.6 + Game.level * 0.35) * cfg.speedMultiplier,
+                x, z, hp: cfg.hp, maxHp: cfg.hp, damage: cfg.damage,
+                attackCooldown: cfg.attackCooldown, attackTimer: 0,
+                isBoss: true
+            };
+            Game.enemies.push(boss);
+            Game.boss = boss;
+        }
+
+        function isBossVulnerable() {
+            if (!Game.boss || Game.bossDefeated) return true;
+            if (Net.role === 'solo') return true;
+            return Game.platesUnlocked && !Game.coopDowned.host && !Game.coopDowned.guest;
         }
 
         function spawnPrize(x, z, forcedPoints) {
@@ -2188,17 +2376,22 @@
             mazeGroup.add(eGroup);
 
             let speed = 1.6 + (Game.level * 0.35);
+            const profile = Combat.getEnemyProfile(currentEnemyType, Game.level);
             let enemyData = {
                 mesh: eGroup,
                 type: currentEnemyType,
-                speed: speed,
+                role: profile.role,
+                speed: speed * profile.speed,
+                hp: profile.hp,
+                maxHp: profile.hp,
+                damage: profile.damage,
+                attackCooldown: profile.attackCooldown,
+                attackTimer: 0,
                 x: x,
                 z: z
             };
 
             if (weaponType) {
-                // Enemigos astutos y poderosos: más veloces, con línea de visión y disparo propio
-                enemyData.speed = speed * 1.15;
                 enemyData.weapon = weaponType;
                 enemyData.sightRange = 16 + Game.level;
                 enemyData.fireCooldown = 1.6 + Math.random() * 0.8;
@@ -2385,14 +2578,14 @@
             'jabalina': { color: 0x66ccff, speed: 12, geo: () => { let g = new THREE.Group(); let shaft = new THREE.Mesh(new THREE.CylinderGeometry(0.03,0.03,0.85,6), new THREE.MeshStandardMaterial({color:0xf0ead6})); let tip = new THREE.Mesh(new THREE.ConeGeometry(0.07,0.25,6), new THREE.MeshBasicMaterial({color:0x66ccff})); tip.position.y=0.55; g.add(shaft,tip); g.rotation.x = Math.PI/2; return g; } }
         };
 
-        function fireEnemyProjectile(enemy) {
+        function fireEnemyProjectile(enemy, target = playerMesh) {
             let visual = WeaponVisuals[enemy.weapon];
             if (!visual) return;
             let mesh = visual.geo();
             mesh.position.copy(enemy.mesh.position);
             mesh.position.y = 0.95;
 
-            let dir = new THREE.Vector3().subVectors(playerMesh.position, enemy.mesh.position);
+            let dir = new THREE.Vector3().subVectors(target.position, enemy.mesh.position);
             dir.y = 0;
             dir.normalize();
 
@@ -2401,7 +2594,11 @@
 
             scene.add(mesh);
             AudioEngine.playShoot();
-            Game.enemyProjectiles.push({ mesh, dir, speed: visual.speed, spinning: enemy.weapon === 'shuriken' });
+            Game.enemyProjectiles.push({
+                mesh, dir, speed: visual.speed,
+                spinning: enemy.weapon === 'shuriken',
+                damage: Math.max(18, Math.round((enemy.damage || 24) * 0.8))
+            });
         }
 
         // ==========================================================================
@@ -2650,6 +2847,7 @@
             Game.coopDowned = { host: false, guest: false, hostTimer: 0, guestTimer: 0 };
             Game.reviveProgress = 0;
             Game.reviveTarget = null;
+            Game.bossDefeated = Net.role === 'guest' ? !!Net.state?.bossDefeated : false;
 
             buildVisualMaze();
 
@@ -2743,6 +2941,7 @@
             Game.coopDowned[role + 'Timer'] = 0;
             Game.reviveProgress = 0;
             Game.reviveTarget = null;
+            Game.health[role] = Combat.combatRules.reviveHealth;
             const target = role === 'host' ? playerMesh : Net.remote;
             if (target) {
                 target.rotation.z = 0;
@@ -2759,6 +2958,7 @@
             Game.reviveTarget = null;
             Game.lives--;
             Game.score = Math.max(0, Game.score - 2500);
+            Game.health[role] = Game.maxHealth;
             const target = role === 'host' ? playerMesh : Net.remote;
             if (target) {
                 target.rotation.z = 0;
