@@ -635,7 +635,7 @@
     <div id="menu-screen" class="overlay">
         <h1>Explorador Extremo 3D</h1>
         <div class="author-tag">Autor del Juego: Profesor Juan Neira</div>
-        <div class="subtitle">V13.2.2 · Corrección de mejoras</div>
+        <div class="subtitle">V13.2.3 · Balance de enemigos</div>
         <button class="btn" id="btn-start">Jugar solo</button>
 
         <div id="online-entry">
@@ -2170,7 +2170,7 @@
             mazeGroup.add(model);
             const boss = {
                 mesh: model, type: cfg.name, name: cfg.name, role: 'boss',
-                speed: (1.6 + Game.level * 0.35) * cfg.speedMultiplier,
+                speed: Combat.getEnemyBaseSpeed(Game.level, 1) * cfg.speedMultiplier,
                 x, z, hp: cfg.hp, maxHp: cfg.hp, damage: cfg.damage,
                 attackCooldown: cfg.attackCooldown, attackTimer: 0,
                 isBoss: true
@@ -2567,14 +2567,14 @@
             eGroup.position.set(x, 0, z);
             mazeGroup.add(eGroup);
 
-            let speed = 1.6 + (Game.level * 0.35);
             const profile = Combat.getEnemyProfile(currentEnemyType, Game.level);
             const levelProfile = Progression.getLevelProfile(Game.level);
             let enemyData = {
                 mesh: eGroup,
                 type: currentEnemyType,
                 role: profile.role,
-                speed: speed * profile.speed * Math.min(1.28, levelProfile.enemyScale),
+                // La velocidad usa una curva propia. enemyScale queda reservado a HP/daño.
+                speed: Combat.getEnemyBaseSpeed(Game.level, profile.speed),
                 hp: Math.max(1, Math.round(profile.hp * levelProfile.enemyScale)),
                 maxHp: Math.max(1, Math.round(profile.hp * levelProfile.enemyScale)),
                 damage: Math.max(1, Math.round(profile.damage * levelProfile.enemyScale)),
@@ -4070,18 +4070,18 @@
 
                 enemy.attackTimer = Math.max(0, (enemy.attackTimer || 0) - delta);
                 let moveDir = dirVec.clone();
-                let speedMultiplier = 1;
+                const movement = Combat.getEffectiveEnemySpeed(
+                    enemy.speed,
+                    enemy.role,
+                    distanceToPlayer,
+                    {
+                        isBoss: !!enemy.isBoss,
+                        enraged: !!enemy.isBoss && enemy.hp <= enemy.maxHp * 0.5
+                    }
+                );
+                if (movement.reverse) moveDir.negate();
 
-                if (enemy.role === 'sprinter' && distanceToPlayer < 7) speedMultiplier = 1.5;
-                else if (enemy.role === 'ambusher' && distanceToPlayer < 9) speedMultiplier = 1.28;
-                else if (enemy.role === 'tank') speedMultiplier = 0.92;
-                else if (enemy.role?.includes('ranged')) {
-                    if (distanceToPlayer < 5) moveDir.negate();
-                    else if (distanceToPlayer < 9) speedMultiplier = 0.18;
-                }
-                if (enemy.isBoss && enemy.hp <= enemy.maxHp * 0.5) speedMultiplier *= 1.38;
-
-                enemy.mesh.position.addScaledVector(moveDir, enemy.speed * speedMultiplier * delta);
+                enemy.mesh.position.addScaledVector(moveDir, movement.speed * delta);
                 enemy.mesh.lookAt(target.position.x, target.position.y, target.position.z);
 
                 const meleeRange = enemy.isBoss ? 1.7 : 1.05;
