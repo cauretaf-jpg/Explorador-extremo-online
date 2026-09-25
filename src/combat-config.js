@@ -1,3 +1,5 @@
+import { getEnemyBaseSpeed, getEnemyMovementTuning, getEffectiveEnemySpeed } from './game/enemy-balance.mjs';
+
 const enemyProfiles = {
   León:             { role: 'sprinter', hp: 3, damage: 24, speed: 1.22, attackCooldown: 1.0 },
   Fantasma:         { role: 'skirmisher', hp: 3, damage: 20, speed: 1.12, attackCooldown: 1.15 },
@@ -40,4 +42,10 @@ export const combatRules = {
   }
 };
 
-window.ExploradorCombatConfig = { getEnemyProfile, combatRules };
+window.ExploradorCombatConfig = {
+  getEnemyProfile,
+  getEnemyBaseSpeed,
+  getEnemyMovementTuning,
+  getEffectiveEnemySpeed,
+  combatRules
+};

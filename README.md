@@ -1,6 +1,21 @@
-# Explorador Extremo V13.2.2 · corrección de mejoras
+# Explorador Extremo V13.2.3 · balance de enemigos
 
 Copia independiente del juego del profesor Juan Neira (crédito conservado en pantalla). V13 mantiene el modo individual y cooperativo y agrega persistencia de perfiles, estadísticas y ranking con Supabase.
+
+## Novedades V13.2.3
+
+- Rebalanceada la velocidad de enemigos desde nivel 3 en adelante.
+- La velocidad deja de multiplicarse por `enemyScale`; ese factor sigue aumentando HP y daño.
+- Nueva curva base de movimiento: crecimiento suave de **2,15 u/s (nivel 1)** a **3,65 u/s (nivel 11)** antes del perfil del enemigo.
+- Sprinters bajan de x1,50 a x1,25 cuando persiguen de cerca.
+- Ambushers bajan de x1,28 a x1,14.
+- Enemigos ranged retroceden más lentamente al estar demasiado cerca.
+- Fase enfurecida de jefes baja de x1,38 a x1,18.
+- Límite de velocidad efectiva para enemigos normales: 4,9 u/s; sprinters: 5,2 u/s.
+- La velocidad de referencia del jugador se mantiene en 7 u/s, dejando margen real de reacción y reposicionamiento.
+- HP, daño, trampas, cantidad de enemigos y objetivos siguen escalando para mantener dificultad.
+- Pruebas automáticas de curva de velocidad para evitar regresiones.
+- Paquete **1.3.5**.
 
 ## Novedades V13.2.2
 

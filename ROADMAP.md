@@ -1,6 +1,6 @@
 # Roadmap de desarrollo · Explorador Extremo Online
 
-Estado actualizado para V13.2.2.
+Estado actualizado para V13.2.3.
 
 | Prioridad | Mejora | Estado | Siguiente objetivo |
 |---|---|---|---|
@@ -125,3 +125,11 @@ Validar el Modo Batalla con 3–8 dispositivos/navegadores reales, incluyendo en
 - Clic/tap sobre tarjetas restaurado.
 - Eliminado rerender de mejoras por frame.
 - Test automático de interacción de mejoras.
+
+
+### V13.2.3 · Balance de enemigos
+- Velocidad desacoplada del escalado de HP/daño.
+- Curva de persecución más gradual.
+- Sprinter/ambusher y furia de jefe moderados.
+- Límites de velocidad frente a la velocidad del jugador.
+- Tests automáticos de balance de movimiento.
